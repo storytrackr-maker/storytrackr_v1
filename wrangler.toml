@@ -10,7 +10,7 @@ preview_id = "fa0dcdbcbfac4c11a7c0ecc9944684f8"   # ← paste preview ID here (c
 
 [[r2_buckets]]
 binding = "ASM_R2"
-bucket_name = "asm-photos"
+bucket_name = "asm-photos" 
 
 # Secrets are set via: wrangler secret put SECRET_NAME
 # Required secrets:
