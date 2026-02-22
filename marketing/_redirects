@@ -1,0 +1,12 @@
+# Redirect /features → /features.html etc (optional, for clean URLs)
+/features   /features.html   200
+/pricing    /pricing.html    200
+/security   /security.html   200
+/support    /support.html    200
+/privacy    /privacy.html    200
+/terms      /terms.html      200
+
+# Redirect old app links to app subdomain
+/login      https://app.storytrackr.app/login   302
+/signup     https://app.storytrackr.app/signup  302
+/demo       https://app.storytrackr.app/demo    302

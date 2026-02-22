@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security — StoryTrackr</title>
+  <meta name="description" content="How StoryTrackr protects your student data — encryption, access control, and privacy by design.">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">StoryTrackr</a>
+    <ul class="nav-links">
+      <li><a href="/features.html">Features</a></li>
+      <li><a href="/pricing.html">Pricing</a></li>
+      <li><a href="/security.html">Security</a></li>
+      <li><a href="/support.html">Support</a></li>
+    </ul>
+    <div class="nav-cta">
+      <a href="https://app.storytrackr.app/login" class="btn btn-ghost btn-sm">Log in</a>
+      <a href="https://app.storytrackr.app/signup" class="btn btn-outline btn-sm">Start Free Trial</a>
+      <button class="btn btn-demo btn-sm" data-demo>Try Demo</button>
+    </div>
+    <button class="nav-hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
+  </div>
+</nav>
+
+<div class="page-hero">
+  <div class="container text-center">
+    <p class="breadcrumb"><a href="/">Home</a> › Security</p>
+    <h1>Security you can trust with student data</h1>
+    <p class="lead mt-2">Your students' information is sensitive. We take that seriously — from how we store passwords to how we enforce access between organizations.</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="container">
+    <div class="security-grid">
+      <div class="security-card">
+        <div class="security-icon">🔐</div>
+        <h3>PBKDF2 Password Hashing</h3>
+        <p>Passwords are hashed using PBKDF2 with 100,000 iterations and a 16-byte random salt. We never store plain-text passwords — not even temporarily.</p>
+      </div>
+      <div class="security-card">
+        <div class="security-icon">🍪</div>
+        <h3>HttpOnly Session Cookies</h3>
+        <p>Sessions use HttpOnly, Secure, SameSite=Lax cookies. JavaScript on the page cannot access your session token — it's entirely invisible to client-side code.</p>
+      </div>
+      <div class="security-card">
+        <div class="security-icon">🏢</div>
+        <h3>Strict Tenant Isolation</h3>
+        <p>Your organization's data is siloed server-side. Tenant identity is derived from your authenticated session — never from a URL slug or client-supplied parameter.</p>
+      </div>
+      <div class="security-card">
+        <div class="security-icon">🛡️</div>
+        <h3>Role-Based Access Control</h3>
+        <p>Fine-grained permissions per module (Roster, Notes, Admin, etc.) with configurable access levels (None, View, Edit, Admin) per role. Admins control access without developer involvement.</p>
+      </div>
+      <div class="security-card">
+        <div class="security-icon">☁️</div>
+        <h3>Cloudflare Infrastructure</h3>
+        <p>All data is stored in Cloudflare KV and R2 — globally distributed, encrypted at rest, and protected by Cloudflare's network layer including DDoS mitigation.</p>
+      </div>
+      <div class="security-card">
+        <div class="security-icon">📋</div>
+        <h3>Audit Trail</h3>
+        <p>Admin actions (approvals, role changes) are logged with actor identity and timestamp. Audit records are retained for 180 days.</p>
+      </div>
+      <div class="security-card">
+        <div class="security-icon">🔗</div>
+        <h3>HTTPS Everywhere</h3>
+        <p>All traffic is encrypted in transit. We enforce HTTPS with HSTS headers. No plain-text HTTP endpoints exist anywhere in our stack.</p>
+      </div>
+      <div class="security-card">
+        <div class="security-icon">⏱️</div>
+        <h3>Short-Lived Demo Sessions</h3>
+        <p>Demo sessions expire after 60 minutes and are strictly read-only. Demo data contains no real PII. Rate limiting prevents abuse of the demo system.</p>
+      </div>
+      <div class="security-card">
+        <div class="security-icon">🚫</div>
+        <h3>Demo Mode Restrictions</h3>
+        <p>Demo users cannot create, edit, delete, export, or invite. Every mutation endpoint checks session type server-side — there is no client-side bypass possible.</p>
+      </div>
+    </div>
+
+    <div style="max-width:720px;margin:4rem auto 0;">
+      <h2>Our Security Principles</h2>
+      <div style="display:flex;flex-direction:column;gap:1.5rem;margin-top:1.5rem;">
+        <div>
+          <h3>Defense in Depth</h3>
+          <p>Security checks exist at multiple layers. Even if a UI control is bypassed, the server-side permission check will reject unauthorized requests.</p>
+        </div>
+        <div>
+          <h3>Least Privilege</h3>
+          <p>New users start with minimum access and are upgraded by an admin. Leaders only see and do what their role allows — nothing more.</p>
+        </div>
+        <div>
+          <h3>No Third-Party Data Sharing</h3>
+          <p>We do not sell, share, or use your student data for advertising. Your data is used solely to operate the StoryTrackr service.</p>
+        </div>
+        <div>
+          <h3>Responsible Disclosure</h3>
+          <p>Found a security issue? Email <a href="mailto:security@storytrackr.app">security@storytrackr.app</a>. We'll respond within 48 hours and credit you if you'd like.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div><div class="footer-brand">StoryTrackr</div><p class="footer-tagline">Every student has a story worth knowing.</p></div>
+      <div class="footer-col"><h4>Product</h4><ul><li><a href="/features.html">Features</a></li><li><a href="/pricing.html">Pricing</a></li><li><a href="/security.html">Security</a></li></ul></div>
+      <div class="footer-col"><h4>Company</h4><ul><li><a href="/support.html">Support</a></li><li><a href="mailto:hello@storytrackr.app">Contact</a></li></ul></div>
+      <div class="footer-col"><h4>Legal</h4><ul><li><a href="/privacy.html">Privacy Policy</a></li><li><a href="/terms.html">Terms of Service</a></li></ul></div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 StoryTrackr.</span>
+      <div class="footer-bottom-links"><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/marketing.js"></script>
+</body>
+</html>
