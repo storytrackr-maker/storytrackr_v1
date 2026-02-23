@@ -9,10 +9,18 @@ export const jsonResp = (data, status = 200) =>
 export const cookieStr = (name, value, maxAge) =>
   `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 
+export const orgMemberKey = (orgId, email) => `orgmember:${orgId}:${email}`;
+export const orgSettingsKey = orgId => `settings:org:${orgId || 'default'}`;
+
 // ── Extract session token from Cookie header ──────────────────
 export function getToken(request) {
   const m = (request.headers.get('Cookie') || '').match(/st_session=([a-f0-9]+)/);
   return m ? m[1] : null;
+}
+
+export async function getOrgMembership(env, orgId, email) {
+  if (!orgId || !email) return null;
+  return env.ST_KV.get(orgMemberKey(orgId, email), { type: 'json' });
 }
 
 // ── Look up the user from the session token ───────────────────
@@ -24,25 +32,21 @@ export async function getSessionUser(env, request) {
     if (sess) await env.ST_KV.delete(`session:${token}`);
     return null;
   }
-  // Passcode session — read-only viewer
   if (sess.type === 'passcode') {
-    return { name: 'Viewer', email: null, role: 'viewer', expiresAt: sess.expiresAt };
+    return { name: 'Viewer', email: null, role: 'viewer', orgRole: 'viewer', expiresAt: sess.expiresAt };
   }
-  // Demo session — read-only demo user (tenantId is always the demo tenant)
   if (sess.type === 'demo') {
     return {
-      name: 'Demo User',
-      email: null,
-      role: 'demo',
-      isDemoMode: true,
-      orgId: env.DEMO_TENANT_ID || 'demo',
-      expiresAt: sess.expiresAt,
+      name: 'Demo User', email: null, role: 'demo', orgRole: 'demo', isDemoMode: true,
+      orgId: env.DEMO_TENANT_ID || 'demo', expiresAt: sess.expiresAt,
     };
   }
   const user = await env.ST_KV.get(`user:${sess.email}`, { type: 'json' });
   if (!user) return null;
-  // Attach orgId derived from session (never trust client-supplied orgId)
   user.orgId = sess.orgId || 'default';
+  const membership = await getOrgMembership(env, user.orgId, user.email);
+  user.orgRole = membership?.role || 'pending';
+  user.orgStatus = membership?.status || 'pending';
   return user;
 }
 
@@ -59,8 +63,8 @@ const DEFAULT_MODULES = {
   dashboard:    { pending: 'view',  approved: 'view', leader: 'view', admin: 'admin', demo: 'view' },
 };
 
-export async function getPermissionMatrix(env) {
-  const settings = await env.ST_KV.get('settings:org', { type: 'json' });
+export async function getPermissionMatrix(env, orgId = 'default') {
+  const settings = await env.ST_KV.get(orgSettingsKey(orgId), { type: 'json' });
   const matrix = settings?.permissions?.modules || {};
   const merged = {};
   for (const [module, defaults] of Object.entries(DEFAULT_MODULES)) {
@@ -71,11 +75,11 @@ export async function getPermissionMatrix(env) {
 
 export async function hasPermission(env, user, module, level = 'view') {
   if (!user) return false;
-  if (user.role === 'admin') return true;
-  // Demo users are strictly read-only
+  if (user.orgRole === 'admin') return true;
   if (user.role === 'demo' && (PERMISSION_LEVELS[level] || 0) > PERMISSION_LEVELS.view) return false;
-  const matrix = await getPermissionMatrix(env);
-  const role = user.role || 'pending';
+  if (user.orgStatus && user.orgStatus !== 'approved' && user.orgRole !== 'pending') return false;
+  const matrix = await getPermissionMatrix(env, user.orgId || 'default');
+  const role = user.orgRole || user.role || 'pending';
   const userLevel = matrix[module]?.[role] || ROLE_DEFAULTS[role] || 'none';
   return (PERMISSION_LEVELS[userLevel] || 0) >= (PERMISSION_LEVELS[level] || 0);
 }
@@ -86,6 +90,44 @@ export async function requirePermission(env, request, module, level = 'view') {
   const ok = await hasPermission(env, user, module, level);
   if (!ok) return { ok: false, response: jsonResp({ error: 'Forbidden' }, 403) };
   return { ok: true, user };
+}
+
+export async function withPermission(env, request, module, level, handler) {
+  const perm = await requirePermission(env, request, module, level);
+  if (!perm.ok) return perm.response;
+  return handler(perm.user);
+}
+
+export function getClientIp(request) {
+  const direct = request.headers.get('CF-Connecting-IP');
+  if (direct) return direct;
+  const xff = request.headers.get('X-Forwarded-For') || '';
+  return xff.split(',')[0].trim() || 'unknown';
+}
+
+export function getRequestId(request) {
+  return request.headers.get('X-Request-Id') || request.headers.get('CF-Ray') || generateToken().slice(0, 16);
+}
+
+export function logEvent(request, level, event, data = {}) {
+  const payload = {
+    ts: new Date().toISOString(), level, event,
+    requestId: getRequestId(request), path: new URL(request.url).pathname,
+    ...data,
+  };
+  console.log(JSON.stringify(payload));
+}
+
+export async function checkRateLimit(env, key, limit, windowSec) {
+  const now = Date.now();
+  const state = (await env.ST_KV.get(key, { type: 'json' })) || { count: 0, windowStart: now };
+  if (now - state.windowStart > windowSec * 1000) {
+    state.count = 0;
+    state.windowStart = now;
+  }
+  state.count += 1;
+  await env.ST_KV.put(key, JSON.stringify(state), { expirationTtl: windowSec });
+  return state.count <= limit;
 }
 
 export function validatePasswordStrength(password = '') {
@@ -110,14 +152,27 @@ export async function hashPassword(password) {
 }
 
 export async function verifyPassword(password, stored) {
+  if (typeof stored !== 'string') return false;
   const [saltHex, hashHex] = stored.split(':');
-  const salt = new Uint8Array(saltHex.match(/.{2}/g).map(b => parseInt(b, 16)));
+  if (!saltHex || !hashHex || saltHex.length % 2 !== 0 || hashHex.length !== 64) return false;
+  if (!/^[a-f0-9]+$/i.test(saltHex) || !/^[a-f0-9]+$/i.test(hashHex)) return false;
+  const saltPairs = saltHex.match(/.{2}/g);
+  if (!saltPairs) return false;
+  const salt = new Uint8Array(saltPairs.map(b => parseInt(b, 16)));
   const enc = new TextEncoder();
   const km = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
     { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, km, 256
   );
-  return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, '0')).join('') === hashHex;
+  const computed = [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, '0')).join('');
+  return constantTimeEqual(computed, hashHex.toLowerCase());
+}
+
+function constantTimeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
 export function generateToken() {
@@ -127,8 +182,7 @@ export function generateToken() {
 export async function sendEmail(env, { to, subject, html }) {
   try {
     const res = await fetch('https://api.mailchannels.net/tx/v1/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         personalizations: [{ to: [{ email: to }] }],
         from: { email: env.MAILCHANNELS_FROM || 'noreply@storytrackr.app', name: 'StoryTrackr' },

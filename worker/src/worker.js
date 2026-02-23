@@ -18,6 +18,7 @@ import { handleUpload }       from './api/upload.js';
 import { handleSettings }     from './api/settings.js';
 import { handleStudents }     from './api/students.js';
 import { handleDemo }         from './api/demo.js';
+import { generateToken, logEvent } from './api/utils.js';
 
 const ALLOWED_ORIGINS = [
   'https://storytrackr.app',
@@ -25,6 +26,24 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:8787',
 ];
+
+
+
+function securityHeaders(requestId) {
+  return {
+    'X-Request-Id': requestId,
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Frame-Options': 'DENY',
+    'Content-Security-Policy': "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' https:; frame-ancestors 'none';",
+  };
+}
+
+function withRequestId(request, requestId) {
+  const headers = new Headers(request.headers);
+  headers.set('X-Request-Id', requestId);
+  return new Request(request, { headers });
+}
 
 function corsHeaders(request) {
   const origin = request.headers.get('Origin') || '';
@@ -40,76 +59,55 @@ function corsHeaders(request) {
 
 export default {
   async fetch(request, env, ctx) {
-    const url = new URL(request.url);
+    const requestId = request.headers.get('CF-Ray') || generateToken().slice(0, 16);
+    const req = withRequestId(request, requestId);
+    const url = new URL(req.url);
     const { pathname } = url;
-    const method = request.method;
+    const method = req.method;
+    const cors = { ...corsHeaders(req), ...securityHeaders(requestId) };
 
-    // ── CORS preflight ────────────────────────────────────────
-    if (method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders(request) });
-    }
+    logEvent(req, 'info', 'request.start', { method, pathname });
 
-    // ── PWA Manifest ──────────────────────────────────────────
-    if (pathname === '/manifest.json') {
-      const settings = await env.ST_KV.get('settings:org', { type: 'json' });
-      const name = settings?.ministryName || 'StoryTrackr';
-      const manifest = JSON.stringify({
-        name,
-        short_name: 'StoryTrackr',
-        start_url: '/',
-        display: 'standalone',
-        background_color: '#0f172a',
-        theme_color: '#6366f1',
-        icons: [
-          { src: '/assets/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/assets/icon-512.png', sizes: '512x512', type: 'image/png' },
-        ],
-      });
-      return new Response(manifest, {
-        headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600', ...corsHeaders(request) },
-      });
-    }
+    try {
+      if (method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: cors });
+      }
 
-    // ── R2 object serving ─────────────────────────────────────
-    if (pathname.startsWith('/r2/') && method === 'GET') {
-      return serveR2(env, pathname, request);
-    }
+      if (pathname === '/manifest.json') {
+        const orgId = new URL(req.url).searchParams.get('orgId') || 'default';
+        const settings = await env.ST_KV.get(`settings:org:${orgId}`, { type: 'json' });
+        const name = settings?.ministryName || 'StoryTrackr';
+        const manifest = JSON.stringify({
+          name,
+          short_name: 'StoryTrackr',
+          start_url: '/',
+          display: 'standalone',
+          background_color: '#0f172a',
+          theme_color: '#6366f1',
+          icons: [
+            { src: '/assets/icon-192.png', sizes: '192x192', type: 'image/png' },
+            { src: '/assets/icon-512.png', sizes: '512x512', type: 'image/png' },
+          ],
+        });
+        return new Response(manifest, { headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600', ...cors } });
+      }
 
-    // ── API routing ───────────────────────────────────────────
-    const cors = corsHeaders(request);
+      if (pathname.startsWith('/r2/') && method === 'GET') return serveR2(env, pathname, req, requestId);
+      if (pathname.startsWith('/api/settings')) return withCors(handleSettings(req, env, pathname, method), cors);
+      if (pathname.startsWith('/api/auth/') || pathname === '/api/me' || pathname.startsWith('/api/profile')) return withCors(handleAuth(req, env, pathname, method), cors);
+      if (pathname.startsWith('/api/demo')) return withCors(handleDemo(req, env, pathname, method), cors);
+      if (pathname.startsWith('/api/student/interactions')) return withCors(handleInteractions(req, env, pathname, method), cors);
+      if (pathname.startsWith('/api/students')) return withCors(handleStudents(req, env, pathname, method), cors);
+      if (pathname.startsWith('/api/admin/')) return withCors(handleAdmin(req, env, pathname, method), cors);
+      if (pathname.startsWith('/api/activity/')) return withCors(handleActivity(req, env, pathname, method), cors);
+      if (pathname === '/api/brain-dump' && method === 'POST') return withCors(handleBrainDump(req, env), cors);
+      if (pathname === '/api/upload-photo' && method === 'POST') return withCors(handleUpload(req, env), cors);
 
-    if (pathname.startsWith('/api/settings')) {
-      return withCors(handleSettings(request, env, pathname, method), cors);
+      return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...cors } });
+    } catch (error) {
+      logEvent(req, 'error', 'request.error', { method, pathname, message: error?.message || 'unknown' });
+      return new Response(JSON.stringify({ error: 'Internal server error', requestId }), { status: 500, headers: { 'Content-Type': 'application/json', ...cors } });
     }
-    if (pathname.startsWith('/api/auth/') || pathname === '/api/me' || pathname.startsWith('/api/profile')) {
-      return withCors(handleAuth(request, env, pathname, method), cors);
-    }
-    if (pathname.startsWith('/api/demo')) {
-      return withCors(handleDemo(request, env, pathname, method), cors);
-    }
-    if (pathname.startsWith('/api/student/interactions')) {
-      return withCors(handleInteractions(request, env, pathname, method), cors);
-    }
-    if (pathname.startsWith('/api/students')) {
-      return withCors(handleStudents(request, env, pathname, method), cors);
-    }
-    if (pathname.startsWith('/api/admin/')) {
-      return withCors(handleAdmin(request, env, pathname, method), cors);
-    }
-    if (pathname.startsWith('/api/activity/')) {
-      return withCors(handleActivity(request, env, pathname, method), cors);
-    }
-    if (pathname === '/api/brain-dump' && method === 'POST') {
-      return withCors(handleBrainDump(request, env), cors);
-    }
-    if (pathname === '/api/upload-photo' && method === 'POST') {
-      return withCors(handleUpload(request, env), cors);
-    }
-
-    return new Response(JSON.stringify({ error: 'Not found' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json', ...cors },
-    });
   },
 };
 
@@ -120,7 +118,7 @@ async function withCors(responsePromise, cors) {
   return new Response(response.body, { status: response.status, headers: newHeaders });
 }
 
-async function serveR2(env, pathname, request) {
+async function serveR2(env, pathname, request, requestId) {
   if (!env.ST_R2) return new Response('R2 not configured', { status: 500 });
   const key = pathname.slice(4);
   if (!key || key.includes('..')) return new Response('Invalid path', { status: 400 });
@@ -132,6 +130,7 @@ async function serveR2(env, pathname, request) {
       'Cache-Control': 'public, max-age=31536000, immutable',
       'ETag': object.etag,
       ...corsHeaders(request),
+      ...securityHeaders(requestId),
     },
   });
 }

@@ -1,8 +1,10 @@
 import {
   jsonResp, cookieStr, getSessionUser,
   hashPassword, verifyPassword, generateToken, sendEmail, trackMetric,
-  validatePasswordStrength, hashToken,
+  validatePasswordStrength, hashToken, checkRateLimit, getClientIp,
+  orgMemberKey, getOrgMembership,
 } from './utils.js';
+import { isValidEmail, normalizeEmail, parseJsonBody } from './validation.js';
 
 const SESSION_TTL = 30 * 24 * 60 * 60;
 const RESET_TTL   = 30 * 60;
@@ -21,33 +23,37 @@ export async function handleAuth(request, env, pathname, method) {
 }
 
 async function signup(request, env) {
-  const { email, password, name, orgName } = await request.json();
+  const body = await parseJsonBody(request);
+  if (!body) return jsonResp({ error: 'Invalid JSON body' }, 400);
+  const { email, password, name, orgName } = body;
   if (!email || !password || !name) return jsonResp({ error: 'All fields required' }, 400);
   if (!validatePasswordStrength(password)) return jsonResp({ error: 'Use 10+ chars with upper/lowercase and number' }, 400);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonResp({ error: 'Invalid email' }, 400);
-  if (await env.ST_KV.get(`user:${email.toLowerCase()}`)) return jsonResp({ error: 'Account already exists' }, 409);
+  if (!isValidEmail(email)) return jsonResp({ error: 'Invalid email' }, 400);
+  const normalizedEmail = normalizeEmail(email);
+  if (await env.ST_KV.get(`user:${normalizedEmail}`)) return jsonResp({ error: 'Account already exists' }, 409);
 
   // Create org if orgName provided (new SaaS org creation)
   let newOrgId = 'default';
   if (orgName) {
     newOrgId = `org_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const org = { id: newOrgId, name: orgName, createdAt: new Date().toISOString(), ownerId: email.toLowerCase() };
+    const org = { id: newOrgId, name: orgName, createdAt: new Date().toISOString(), ownerId: normalizedEmail };
     await env.ST_KV.put(`org:${newOrgId}`, JSON.stringify(org));
     // Make first user admin of their org
-    await env.ST_KV.put(`orgmember:${newOrgId}:${email.toLowerCase()}`, JSON.stringify({ role: 'admin', status: 'approved', joinedAt: new Date().toISOString() }));
+    await env.ST_KV.put(`orgmember:${newOrgId}:${normalizedEmail}`, JSON.stringify({ role: 'admin', status: 'approved', joinedAt: new Date().toISOString() }));
   }
 
   const user = {
-    email: email.toLowerCase(), name,
+    email: normalizedEmail, name,
     passwordHash: await hashPassword(password),
-    role: orgName ? 'admin' : 'pending',
-    status: orgName ? 'approved' : 'pending_approval',
+    role: 'user',
+    status: 'active',
     orgIds: [newOrgId],
     createdAt: new Date().toISOString(),
   };
   await env.ST_KV.put(`user:${user.email}`, JSON.stringify(user));
 
   if (!orgName) {
+    await env.ST_KV.put(orgMemberKey('default', user.email), JSON.stringify({ role: 'pending', status: 'pending_approval', joinedAt: new Date().toISOString() }));
     // Notify admins for approval
     const admins = await listAdmins(env);
     await Promise.all(admins.map(a => sendEmail(env, {
@@ -67,29 +73,39 @@ async function signup(request, env) {
 }
 
 async function login(request, env) {
-  const { email, password } = await request.json();
+  const body = await parseJsonBody(request);
+  if (!body) return jsonResp({ error: 'Invalid JSON body' }, 400);
+  const { email, password } = body;
   if (!email || !password) return jsonResp({ error: 'Invalid email or password' }, 401);
-  const user = await env.ST_KV.get(`user:${email.toLowerCase()}`, { type: 'json' });
-  if (!user || !await verifyPassword(password, user.passwordHash)) return jsonResp({ error: 'Invalid email or password' }, 401);
-  if (user.status === 'denied') return jsonResp({ error: 'Your request was denied.' }, 403);
-  if (user.role === 'pending' || user.status === 'pending_approval') return jsonResp({ error: 'Your account is pending approval.' }, 403);
+  const ip = getClientIp(request);
+  const allowed = await checkRateLimit(env, `ratelimit:auth:login:${ip}`, 20, 60 * 15);
+  if (!allowed) return jsonResp({ error: 'Too many login attempts. Please try again later.' }, 429);
 
-  // Determine org: pick first or let client pick
+  const user = await env.ST_KV.get(`user:${normalizeEmail(email)}`, { type: 'json' });
+  if (!user || !await verifyPassword(password, user.passwordHash)) return jsonResp({ error: 'Invalid email or password' }, 401);
   const orgIds = user.orgIds || ['default'];
-  const selectedOrgId = orgIds.length === 1 ? orgIds[0] : null;
+  const memberships = [];
+  for (const orgId of orgIds) {
+    const m = await getOrgMembership(env, orgId, user.email);
+    if (m) memberships.push({ orgId, ...m });
+  }
+  const approvedMemberships = memberships.filter(m => m.status === 'approved');
+  if (!approvedMemberships.length) return jsonResp({ error: 'Your account is pending approval.' }, 403);
+
+  const selectedOrgId = approvedMemberships[0].orgId;
 
   const token = generateToken();
   await env.ST_KV.put(
     `session:${token}`,
-    JSON.stringify({ email: user.email, orgId: selectedOrgId || orgIds[0], expiresAt: Date.now() + SESSION_TTL * 1000 }),
+    JSON.stringify({ email: user.email, orgId: selectedOrgId, expiresAt: Date.now() + SESSION_TTL * 1000 }),
     { expirationTtl: SESSION_TTL }
   );
   await trackMetric(env, 'login');
   return new Response(JSON.stringify({
     success: true,
     user: safeUser(user),
-    orgIds,
-    requireOrgPicker: orgIds.length > 1,
+    orgIds: approvedMemberships.map(m => m.orgId),
+    requireOrgPicker: approvedMemberships.length > 1,
   }), {
     headers: { 'Content-Type': 'application/json', 'Set-Cookie': cookieStr('st_session', token, SESSION_TTL) },
   });
@@ -135,8 +151,13 @@ async function changePassword(request, env) {
 }
 
 async function forgotPassword(request, env) {
-  const { email } = await request.json();
+  const body = await parseJsonBody(request);
+  if (!body) return jsonResp({ error: 'Invalid JSON body' }, 400);
+  const { email } = body;
   const generic = { success: true, message: 'If that account exists, a reset link has been sent.' };
+  const ip = getClientIp(request);
+  const allowed = await checkRateLimit(env, `ratelimit:auth:forgot:${ip}`, 10, 60 * 15);
+  if (!allowed) return jsonResp({ error: 'Too many reset requests. Please try again later.' }, 429);
   if (!email) return jsonResp(generic);
   const user = await env.ST_KV.get(`user:${String(email).toLowerCase()}`, { type: 'json' });
   if (!user) return jsonResp(generic);
@@ -152,7 +173,12 @@ async function forgotPassword(request, env) {
 }
 
 async function resetPassword(request, env) {
-  const { token, newPassword, confirmPassword } = await request.json();
+  const body = await parseJsonBody(request);
+  if (!body) return jsonResp({ error: 'Invalid JSON body' }, 400);
+  const { token, newPassword, confirmPassword } = body;
+  const ip = getClientIp(request);
+  const allowed = await checkRateLimit(env, `ratelimit:auth:reset:${ip}`, 12, 60 * 15);
+  if (!allowed) return jsonResp({ error: 'Too many reset attempts. Please try again later.' }, 429);
   if (!token || !newPassword || newPassword !== confirmPassword) return jsonResp({ error: 'Invalid request' }, 400);
   if (!validatePasswordStrength(newPassword)) return jsonResp({ error: 'Weak password' }, 400);
   const tokenHash = await hashToken(token);
@@ -172,7 +198,8 @@ async function listAdmins(env) {
   const admins = [];
   for (const key of list.keys) {
     const u = await env.ST_KV.get(key.name, { type: 'json' });
-    if (u?.role === 'admin') admins.push(u);
+    const m = u?.email ? await getOrgMembership(env, 'default', u.email) : null;
+    if (m?.role === 'admin' && m?.status === 'approved') admins.push(u);
   }
   if (!admins.length && env.ADMIN_EMAIL) admins.push({ email: env.ADMIN_EMAIL });
   return admins;
@@ -180,10 +207,10 @@ async function listAdmins(env) {
 
 function safeUser(user) {
   return {
-    name: user.name, email: user.email, role: user.role,
+    name: user.name, email: user.email, role: user.orgRole || user.role,
     photoUrl: user.photoUrl || null, leaderSince: user.leaderSince || null,
     funFact: user.funFact || null, expiresAt: user.expiresAt || null,
-    status: user.status || null, mustChangePassword: !!user.mustChangePassword,
+    status: user.orgStatus || user.status || null, mustChangePassword: !!user.mustChangePassword,
     isDemoMode: !!user.isDemoMode, orgId: user.orgId || 'default',
     orgIds: user.orgIds || ['default'],
   };

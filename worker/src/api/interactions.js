@@ -1,7 +1,7 @@
 /**
  * Interactions API — stores hangout notes in KV (Google Sheets sync removed)
  */
-import { jsonResp, requirePermission } from './utils.js';
+import { jsonResp, requirePermission, withPermission } from './utils.js';
 
 export async function handleInteractions(request, env, pathname, method) {
   if (pathname === '/api/student/interactions' && method === 'GET')    return getInteractions(request, env);
@@ -12,13 +12,20 @@ export async function handleInteractions(request, env, pathname, method) {
 }
 
 async function getInteractions(request, env) {
-  const url     = new URL(request.url);
-  const sk      = url.searchParams.get('sk');
+  return withPermission(env, request, 'hangoutNotes', 'view', async () => {
+    const url = new URL(request.url);
+  const sk = url.searchParams.get('sk');
   const section = url.searchParams.get('section');
-  const index   = url.searchParams.get('index');
-  const key     = `interactions:${sk}:${section}:${index}`;
-  const data    = await env.ST_KV.get(key, { type: 'json' });
-  return jsonResp({ interactions: data || [] });
+  const index = url.searchParams.get('index');
+
+  if (!sk || !section || index === null) {
+    return jsonResp({ error: 'Missing sk, section, or index query parameter' }, 400);
+  }
+
+  const key = `interactions:${sk}:${section}:${index}`;
+    const data = await env.ST_KV.get(key, { type: 'json' });
+    return jsonResp({ interactions: data || [] });
+  });
 }
 
 async function postInteraction(request, env) {
