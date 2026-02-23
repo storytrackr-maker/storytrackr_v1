@@ -7,12 +7,12 @@ export async function handleActivity(request, env, pathname, method) {
 }
 
 async function recentActivity(request, env) {
-  const list = await env.ASM_KV.list({ prefix: 'activity:' });
+  const list = await env.ST_KV.list({ prefix: 'activity:' });
   const items = [];
   // Get the 50 most recent keys (KV lists alphabetically; timestamp keys sort correctly)
   const keys = list.keys.slice(-50).reverse();
   for (const key of keys) {
-    const item = await env.ASM_KV.get(key.name, { type: 'json' });
+    const item = await env.ST_KV.get(key.name, { type: 'json' });
     if (item) items.push(item);
   }
   items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -23,14 +23,14 @@ async function activityStats(request, env) {
   const perm = await requirePermission(env, request, 'activity', 'view');
   if (!perm.ok) return perm.response;
 
-  const list = await env.ASM_KV.list({ prefix: 'activity:' });
+  const list = await env.ST_KV.list({ prefix: 'activity:' });
   const leaderCounts = {};
   const studentCounts = {};
   const now = new Date();
   let thisMonth = 0;
 
   for (const key of list.keys) {
-    const item = await env.ASM_KV.get(key.name, { type: 'json' });
+    const item = await env.ST_KV.get(key.name, { type: 'json' });
     if (!item) continue;
     leaderCounts[item.leader] = (leaderCounts[item.leader] || 0) + 1;
     if (item.studentName) studentCounts[item.studentName] = (studentCounts[item.studentName] || 0) + 1;

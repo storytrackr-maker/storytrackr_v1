@@ -74,21 +74,21 @@ export async function handleSettings(request, env, pathname, method) {
 }
 
 async function getSettings(env) {
-  const stored = await env.ASM_KV.get(SETTINGS_KEY, { type: 'json' });
+  const stored = await env.ST_KV.get(SETTINGS_KEY, { type: 'json' });
   const settings = { ...DEFAULT_SETTINGS, ...stored };
   return jsonResp({ settings });
 }
 
 async function saveSettings(request, env) {
   const updates = await request.json();
-  const current = await env.ASM_KV.get(SETTINGS_KEY, { type: 'json' }) || {};
+  const current = await env.ST_KV.get(SETTINGS_KEY, { type: 'json' }) || {};
   const merged = deepMerge(DEFAULT_SETTINGS, current, updates);
-  await env.ASM_KV.put(SETTINGS_KEY, JSON.stringify(merged));
+  await env.ST_KV.put(SETTINGS_KEY, JSON.stringify(merged));
   return jsonResp({ success: true, settings: merged });
 }
 
 async function getPublicSettings(env) {
-  const stored = await env.ASM_KV.get(SETTINGS_KEY, { type: 'json' });
+  const stored = await env.ST_KV.get(SETTINGS_KEY, { type: 'json' });
   const s = { ...DEFAULT_SETTINGS, ...stored };
   return jsonResp({
     ministryName: s.ministryName,

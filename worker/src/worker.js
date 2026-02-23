@@ -4,8 +4,8 @@
  * Handles: app.storytrackr.app/api/*  (via Worker Route)
  * Marketing demo endpoint: POST /api/demo-session  (CORS-enabled for storytrackr.app)
  *
- * KV BINDING:  ASM_KV
- * R2 BINDING:  ASM_R2
+ * KV BINDING:  ST_KV
+ * R2 BINDING:  ST_R2
  * SECRETS:     ADMIN_EMAIL, SESSION_SECRET, DEMO_TENANT_ID, MAILCHANNELS_FROM
  */
 
@@ -51,7 +51,7 @@ export default {
 
     // ── PWA Manifest ──────────────────────────────────────────
     if (pathname === '/manifest.json') {
-      const settings = await env.ASM_KV.get('settings:org', { type: 'json' });
+      const settings = await env.ST_KV.get('settings:org', { type: 'json' });
       const name = settings?.ministryName || 'StoryTrackr';
       const manifest = JSON.stringify({
         name,
@@ -121,10 +121,10 @@ async function withCors(responsePromise, cors) {
 }
 
 async function serveR2(env, pathname, request) {
-  if (!env.ASM_R2) return new Response('R2 not configured', { status: 500 });
+  if (!env.ST_R2) return new Response('R2 not configured', { status: 500 });
   const key = pathname.slice(4);
   if (!key || key.includes('..')) return new Response('Invalid path', { status: 400 });
-  const object = await env.ASM_R2.get(key);
+  const object = await env.ST_R2.get(key);
   if (!object) return new Response('Not found', { status: 404 });
   return new Response(object.body, {
     headers: {

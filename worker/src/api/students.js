@@ -58,7 +58,7 @@ async function listStudents(request, env) {
   const org     = orgId(perm.user);
 
   if (sk && section) {
-    const data = (await env.ASM_KV.get(rosterKey(org, sk, section), { type: 'json' })) || [];
+    const data = (await env.ST_KV.get(rosterKey(org, sk, section), { type: 'json' })) || [];
     return jsonResp({ students: data });
   }
 
@@ -66,7 +66,7 @@ async function listStudents(request, env) {
   const result = { hs: { core: [], loose: [], fringe: [] }, ms: { core: [], loose: [], fringe: [] } };
   for (const s of ['hs', 'ms']) {
     for (const sec of ['core', 'loose', 'fringe']) {
-      result[s][sec] = (await env.ASM_KV.get(rosterKey(org, s, sec), { type: 'json' })) || [];
+      result[s][sec] = (await env.ST_KV.get(rosterKey(org, s, sec), { type: 'json' })) || [];
     }
   }
   return jsonResp({ roster: result });
@@ -75,7 +75,7 @@ async function listStudents(request, env) {
 async function getStudent(request, env, id) {
   const perm = await requirePermission(env, request, 'roster', 'view');
   if (!perm.ok) return perm.response;
-  const student = await env.ASM_KV.get(studentKey(orgId(perm.user), id), { type: 'json' });
+  const student = await env.ST_KV.get(studentKey(orgId(perm.user), id), { type: 'json' });
   if (!student) return jsonResp({ error: 'Not found' }, 404);
   return jsonResp({ student });
 }
@@ -92,7 +92,7 @@ async function createStudent(request, env) {
   const id    = uuid();
 
   // Assign a stable index for interaction-key compatibility
-  const list  = (await env.ASM_KV.get(rosterKey(org, sk, section), { type: 'json' })) || [];
+  const list  = (await env.ST_KV.get(rosterKey(org, sk, section), { type: 'json' })) || [];
   const index = list.length;
 
   const student = {
@@ -106,8 +106,8 @@ async function createStudent(request, env) {
   };
 
   list.push(student);
-  await env.ASM_KV.put(rosterKey(org, sk, section), JSON.stringify(list));
-  await env.ASM_KV.put(studentKey(org, id), JSON.stringify(student));
+  await env.ST_KV.put(rosterKey(org, sk, section), JSON.stringify(list));
+  await env.ST_KV.put(studentKey(org, id), JSON.stringify(student));
 
   return jsonResp({ success: true, student }, 201);
 }
@@ -117,7 +117,7 @@ async function updateStudent(request, env, id) {
   if (!perm.ok) return perm.response;
 
   const org  = orgId(perm.user);
-  const existing = await env.ASM_KV.get(studentKey(org, id), { type: 'json' });
+  const existing = await env.ST_KV.get(studentKey(org, id), { type: 'json' });
   if (!existing) return jsonResp({ error: 'Not found' }, 404);
 
   const updates = await request.json();
@@ -126,13 +126,13 @@ async function updateStudent(request, env, id) {
   const updated = { ...existing, ...updates, updatedAt: new Date().toISOString() };
 
   // Update individual record
-  await env.ASM_KV.put(studentKey(org, id), JSON.stringify(updated));
+  await env.ST_KV.put(studentKey(org, id), JSON.stringify(updated));
 
   // Update roster list in-place
-  const list = (await env.ASM_KV.get(rosterKey(org, existing.sk, existing.section), { type: 'json' })) || [];
+  const list = (await env.ST_KV.get(rosterKey(org, existing.sk, existing.section), { type: 'json' })) || [];
   const idx  = list.findIndex(s => s.id === id);
   if (idx !== -1) list[idx] = updated;
-  await env.ASM_KV.put(rosterKey(org, existing.sk, existing.section), JSON.stringify(list));
+  await env.ST_KV.put(rosterKey(org, existing.sk, existing.section), JSON.stringify(list));
 
   return jsonResp({ success: true, student: updated });
 }
@@ -142,16 +142,16 @@ async function deleteStudent(request, env, id) {
   if (!perm.ok) return perm.response;
 
   const org = orgId(perm.user);
-  const existing = await env.ASM_KV.get(studentKey(org, id), { type: 'json' });
+  const existing = await env.ST_KV.get(studentKey(org, id), { type: 'json' });
   if (!existing) return jsonResp({ error: 'Not found' }, 404);
 
-  await env.ASM_KV.delete(studentKey(org, id));
+  await env.ST_KV.delete(studentKey(org, id));
 
-  const list    = (await env.ASM_KV.get(rosterKey(org, existing.sk, existing.section), { type: 'json' })) || [];
+  const list    = (await env.ST_KV.get(rosterKey(org, existing.sk, existing.section), { type: 'json' })) || [];
   const filtered = list.filter(s => s.id !== id);
   // Re-index for interaction-key compat
   filtered.forEach((s, i) => { s.index = i; });
-  await env.ASM_KV.put(rosterKey(org, existing.sk, existing.section), JSON.stringify(filtered));
+  await env.ST_KV.put(rosterKey(org, existing.sk, existing.section), JSON.stringify(filtered));
 
   return jsonResp({ success: true });
 }

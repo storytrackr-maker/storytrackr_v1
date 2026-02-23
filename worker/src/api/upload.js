@@ -8,7 +8,7 @@ export async function handleUpload(request, env) {
   const user = await getSessionUser(env, request);
   if (!user) return jsonResp({ error: 'Not authenticated' }, 401);
   if (user.isDemoMode) return jsonResp({ error: 'Demo is read-only' }, 403);
-  if (!env.ASM_R2) return jsonResp({ error: 'Storage not configured' }, 500);
+  if (!env.ST_R2) return jsonResp({ error: 'Storage not configured' }, 500);
 
   try {
     const formData = await request.formData();
@@ -34,7 +34,7 @@ async function uploadToR2(file, type, env) {
   else if (type === 'leader') key = `photos/leader_${ts}_${rand}.${ext}`;
   else                    key = `photos/student_${ts}_${rand}.${ext}`;
 
-  await env.ASM_R2.put(key, buffer, { httpMetadata: { contentType: mime } });
+  await env.ST_R2.put(key, buffer, { httpMetadata: { contentType: mime } });
 
   // Detect logo brightness for nav contrast
   let logoTone = null;
