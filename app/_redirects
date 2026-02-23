@@ -1,0 +1,4 @@
+# All non-asset routes → SPA index.html (client-side routing)
+# Note: /api/* is handled by the Worker Route and never reaches Pages
+/api/*   /api/:splat   200
+/*       /index.html   200
