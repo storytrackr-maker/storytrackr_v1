@@ -25,16 +25,16 @@ async function signup(request, env) {
   if (!email || !password || !name) return jsonResp({ error: 'All fields required' }, 400);
   if (!validatePasswordStrength(password)) return jsonResp({ error: 'Use 10+ chars with upper/lowercase and number' }, 400);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonResp({ error: 'Invalid email' }, 400);
-  if (await env.ASM_KV.get(`user:${email.toLowerCase()}`)) return jsonResp({ error: 'Account already exists' }, 409);
+  if (await env.ST_KV.get(`user:${email.toLowerCase()}`)) return jsonResp({ error: 'Account already exists' }, 409);
 
   // Create org if orgName provided (new SaaS org creation)
   let newOrgId = 'default';
   if (orgName) {
     newOrgId = `org_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const org = { id: newOrgId, name: orgName, createdAt: new Date().toISOString(), ownerId: email.toLowerCase() };
-    await env.ASM_KV.put(`org:${newOrgId}`, JSON.stringify(org));
+    await env.ST_KV.put(`org:${newOrgId}`, JSON.stringify(org));
     // Make first user admin of their org
-    await env.ASM_KV.put(`orgmember:${newOrgId}:${email.toLowerCase()}`, JSON.stringify({ role: 'admin', status: 'approved', joinedAt: new Date().toISOString() }));
+    await env.ST_KV.put(`orgmember:${newOrgId}:${email.toLowerCase()}`, JSON.stringify({ role: 'admin', status: 'approved', joinedAt: new Date().toISOString() }));
   }
 
   const user = {
@@ -45,7 +45,7 @@ async function signup(request, env) {
     orgIds: [newOrgId],
     createdAt: new Date().toISOString(),
   };
-  await env.ASM_KV.put(`user:${user.email}`, JSON.stringify(user));
+  await env.ST_KV.put(`user:${user.email}`, JSON.stringify(user));
 
   if (!orgName) {
     // Notify admins for approval
@@ -60,16 +60,16 @@ async function signup(request, env) {
 
   // Auto-login for new org creators
   const token = generateToken();
-  await env.ASM_KV.put(`session:${token}`, JSON.stringify({ email: user.email, orgId: newOrgId, expiresAt: Date.now() + SESSION_TTL * 1000 }), { expirationTtl: SESSION_TTL });
+  await env.ST_KV.put(`session:${token}`, JSON.stringify({ email: user.email, orgId: newOrgId, expiresAt: Date.now() + SESSION_TTL * 1000 }), { expirationTtl: SESSION_TTL });
   return new Response(JSON.stringify({ success: true, user: safeUser(user), onboarding: true }), {
-    headers: { 'Content-Type': 'application/json', 'Set-Cookie': cookieStr('asm_session', token, SESSION_TTL) },
+    headers: { 'Content-Type': 'application/json', 'Set-Cookie': cookieStr('st_session', token, SESSION_TTL) },
   });
 }
 
 async function login(request, env) {
   const { email, password } = await request.json();
   if (!email || !password) return jsonResp({ error: 'Invalid email or password' }, 401);
-  const user = await env.ASM_KV.get(`user:${email.toLowerCase()}`, { type: 'json' });
+  const user = await env.ST_KV.get(`user:${email.toLowerCase()}`, { type: 'json' });
   if (!user || !await verifyPassword(password, user.passwordHash)) return jsonResp({ error: 'Invalid email or password' }, 401);
   if (user.status === 'denied') return jsonResp({ error: 'Your request was denied.' }, 403);
   if (user.role === 'pending' || user.status === 'pending_approval') return jsonResp({ error: 'Your account is pending approval.' }, 403);
@@ -79,7 +79,7 @@ async function login(request, env) {
   const selectedOrgId = orgIds.length === 1 ? orgIds[0] : null;
 
   const token = generateToken();
-  await env.ASM_KV.put(
+  await env.ST_KV.put(
     `session:${token}`,
     JSON.stringify({ email: user.email, orgId: selectedOrgId || orgIds[0], expiresAt: Date.now() + SESSION_TTL * 1000 }),
     { expirationTtl: SESSION_TTL }
@@ -91,15 +91,15 @@ async function login(request, env) {
     orgIds,
     requireOrgPicker: orgIds.length > 1,
   }), {
-    headers: { 'Content-Type': 'application/json', 'Set-Cookie': cookieStr('asm_session', token, SESSION_TTL) },
+    headers: { 'Content-Type': 'application/json', 'Set-Cookie': cookieStr('st_session', token, SESSION_TTL) },
   });
 }
 
 async function logout(request, env) {
-  const m = (request.headers.get('Cookie') || '').match(/asm_session=([a-f0-9]+)/);
-  if (m) await env.ASM_KV.delete(`session:${m[1]}`);
+  const m = (request.headers.get('Cookie') || '').match(/st_session=([a-f0-9]+)/);
+  if (m) await env.ST_KV.delete(`session:${m[1]}`);
   return new Response(JSON.stringify({ success: true }), {
-    headers: { 'Content-Type': 'application/json', 'Set-Cookie': cookieStr('asm_session', '', 0) },
+    headers: { 'Content-Type': 'application/json', 'Set-Cookie': cookieStr('st_session', '', 0) },
   });
 }
 
@@ -116,7 +116,7 @@ async function profileUpdate(request, env) {
   if (user.isDemoMode) return jsonResp({ error: 'Demo is read-only' }, 403);
   const updates = await request.json();
   ['name', 'leaderSince', 'funFact', 'photoUrl'].forEach(k => { if (updates[k] !== undefined) user[k] = updates[k]; });
-  await env.ASM_KV.put(`user:${user.email}`, JSON.stringify(user));
+  await env.ST_KV.put(`user:${user.email}`, JSON.stringify(user));
   return jsonResp({ success: true });
 }
 
@@ -130,7 +130,7 @@ async function changePassword(request, env) {
   if (!validatePasswordStrength(newPassword)) return jsonResp({ error: 'Weak password' }, 400);
   if (!await verifyPassword(oldPassword, user.passwordHash)) return jsonResp({ error: 'Old password incorrect' }, 401);
   user.passwordHash = await hashPassword(newPassword);
-  await env.ASM_KV.put(`user:${user.email}`, JSON.stringify(user));
+  await env.ST_KV.put(`user:${user.email}`, JSON.stringify(user));
   return jsonResp({ success: true });
 }
 
@@ -138,11 +138,11 @@ async function forgotPassword(request, env) {
   const { email } = await request.json();
   const generic = { success: true, message: 'If that account exists, a reset link has been sent.' };
   if (!email) return jsonResp(generic);
-  const user = await env.ASM_KV.get(`user:${String(email).toLowerCase()}`, { type: 'json' });
+  const user = await env.ST_KV.get(`user:${String(email).toLowerCase()}`, { type: 'json' });
   if (!user) return jsonResp(generic);
   const raw = generateToken();
   const tokenHash = await hashToken(raw);
-  await env.ASM_KV.put(`pwdreset:${tokenHash}`, JSON.stringify({ email: user.email, createdAt: Date.now() }), { expirationTtl: RESET_TTL });
+  await env.ST_KV.put(`pwdreset:${tokenHash}`, JSON.stringify({ email: user.email, createdAt: Date.now() }), { expirationTtl: RESET_TTL });
   await sendEmail(env, {
     to: user.email,
     subject: 'Reset your StoryTrackr password',
@@ -156,22 +156,22 @@ async function resetPassword(request, env) {
   if (!token || !newPassword || newPassword !== confirmPassword) return jsonResp({ error: 'Invalid request' }, 400);
   if (!validatePasswordStrength(newPassword)) return jsonResp({ error: 'Weak password' }, 400);
   const tokenHash = await hashToken(token);
-  const rec = await env.ASM_KV.get(`pwdreset:${tokenHash}`, { type: 'json' });
+  const rec = await env.ST_KV.get(`pwdreset:${tokenHash}`, { type: 'json' });
   if (!rec?.email) return jsonResp({ error: 'Invalid or expired token' }, 400);
-  const user = await env.ASM_KV.get(`user:${rec.email}`, { type: 'json' });
+  const user = await env.ST_KV.get(`user:${rec.email}`, { type: 'json' });
   if (!user) return jsonResp({ error: 'Invalid token' }, 400);
   user.passwordHash = await hashPassword(newPassword);
   user.mustChangePassword = false;
-  await env.ASM_KV.put(`user:${user.email}`, JSON.stringify(user));
-  await env.ASM_KV.delete(`pwdreset:${tokenHash}`);
+  await env.ST_KV.put(`user:${user.email}`, JSON.stringify(user));
+  await env.ST_KV.delete(`pwdreset:${tokenHash}`);
   return jsonResp({ success: true });
 }
 
 async function listAdmins(env) {
-  const list = await env.ASM_KV.list({ prefix: 'user:' });
+  const list = await env.ST_KV.list({ prefix: 'user:' });
   const admins = [];
   for (const key of list.keys) {
-    const u = await env.ASM_KV.get(key.name, { type: 'json' });
+    const u = await env.ST_KV.get(key.name, { type: 'json' });
     if (u?.role === 'admin') admins.push(u);
   }
   if (!admins.length && env.ADMIN_EMAIL) admins.push({ email: env.ADMIN_EMAIL });

@@ -21,18 +21,18 @@ async function createDemoSession(request, env) {
   // Rate limit by IP
   const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
   const rlKey = `demorl:${ip}`;
-  const rl = (await env.ASM_KV.get(rlKey, { type: 'json' })) || { count: 0, start: Date.now() };
+  const rl = (await env.ST_KV.get(rlKey, { type: 'json' })) || { count: 0, start: Date.now() };
 
   if (rl.count >= RATE_LIMIT_MAX) {
     return jsonResp({ error: 'Too many demo requests. Try again later.' }, 429);
   }
   rl.count++;
-  await env.ASM_KV.put(rlKey, JSON.stringify(rl), { expirationTtl: RATE_LIMIT_WINDOW });
+  await env.ST_KV.put(rlKey, JSON.stringify(rl), { expirationTtl: RATE_LIMIT_WINDOW });
 
   // Create one-time token
   const raw = generateToken();
   const tokenHash = await hashToken(raw);
-  await env.ASM_KV.put(
+  await env.ST_KV.put(
     `demotok:${tokenHash}`,
     JSON.stringify({ createdAt: Date.now(), used: false }),
     { expirationTtl: DEMO_TOKEN_TTL }
@@ -48,17 +48,17 @@ async function redeemDemoToken(request, env) {
   if (!token) return jsonResp({ error: 'Token required' }, 400);
 
   const tokenHash = await hashToken(token);
-  const tok = await env.ASM_KV.get(`demotok:${tokenHash}`, { type: 'json' });
+  const tok = await env.ST_KV.get(`demotok:${tokenHash}`, { type: 'json' });
 
   if (!tok || tok.used) return jsonResp({ error: 'Demo token invalid or already used' }, 400);
 
   // Mark used immediately (prevent replay)
-  await env.ASM_KV.put(`demotok:${tokenHash}`, JSON.stringify({ ...tok, used: true }), { expirationTtl: 60 });
+  await env.ST_KV.put(`demotok:${tokenHash}`, JSON.stringify({ ...tok, used: true }), { expirationTtl: 60 });
 
   // Create demo session
   const sessionToken = generateToken();
   const expiresAt = Date.now() + DEMO_SESSION_TTL * 1000;
-  await env.ASM_KV.put(
+  await env.ST_KV.put(
     `session:${sessionToken}`,
     JSON.stringify({ type: 'demo', orgId: env.DEMO_TENANT_ID || 'demo', expiresAt }),
     { expirationTtl: DEMO_SESSION_TTL }
@@ -67,7 +67,7 @@ async function redeemDemoToken(request, env) {
   return new Response(JSON.stringify({ ok: true }), {
     headers: {
       'Content-Type': 'application/json',
-      'Set-Cookie': cookieStr('asm_session', sessionToken, DEMO_SESSION_TTL),
+      'Set-Cookie': cookieStr('st_session', sessionToken, DEMO_SESSION_TTL),
     },
   });
 }

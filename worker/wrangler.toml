@@ -4,26 +4,25 @@ compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
-binding = "ASM_KV"
-id = "fa0dcdbcbfac4c11a7c0ecc9944684f8"
-preview_id = "fa0dcdbcbfac4c11a7c0ecc9944684f8"
+binding = "ST_KV"
+id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
+preview_id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
 
 [[r2_buckets]]
-binding = "ASM_R2"
-bucket_name = "asm-photos"
+binding = "ST_R2"
+bucket_name = "storytrackr-media"
 
-# Required secrets (set via Cloudflare Dashboard → Workers → storytrackr-worker → Settings → Variables):
-#   ADMIN_EMAIL          - Initial admin email address
-#   SESSION_SECRET       - Random 32+ char string for session signing
-#   DEMO_TENANT_ID       - UUID for the demo tenant (e.g. "demo-tenant-001")
-#   MAILCHANNELS_FROM    - Sending email address (e.g. noreply@storytrackr.app)
+# ── Secrets (set in Cloudflare Dashboard → Workers → storytrackr-worker → Settings → Variables) ──
 #
-# Optional secrets (Google integration removed — set only if migrating old data):
-#   SITE_PASSWORD        - Legacy passcode fallback
-
-# Worker Routes (configure in Cloudflare Dashboard → Workers → Routes):
-#   app.storytrackr.app/api/*  → storytrackr-worker
+#   ADMIN_EMAIL          Your email address (bootstraps first admin account)
+#   SESSION_SECRET       Any random 32+ character string
+#   DEMO_TENANT_ID       Set to:  demo
+#   MAILCHANNELS_FROM    noreply@storytrackr.app
 #
-# After adding a Custom Domain to the Worker:
-#   storytrackr.app → marketing Pages project (separate)
-#   app.storytrackr.app → app Pages project + above Worker Route for /api/*
+# ── Cloudflare Resources to create (see DEPLOY.md or the instructions below) ──
+#
+#   KV Namespace:   name = "storytrackr-kv"   → paste the ID above
+#   R2 Bucket:      name = "storytrackr-media"
+#
+# ── Worker Route (set in Dashboard after deploying) ──
+#   app.storytrackr.app/api/*  →  storytrackr-worker

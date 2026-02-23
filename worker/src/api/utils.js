@@ -11,7 +11,7 @@ export const cookieStr = (name, value, maxAge) =>
 
 // ── Extract session token from Cookie header ──────────────────
 export function getToken(request) {
-  const m = (request.headers.get('Cookie') || '').match(/asm_session=([a-f0-9]+)/);
+  const m = (request.headers.get('Cookie') || '').match(/st_session=([a-f0-9]+)/);
   return m ? m[1] : null;
 }
 
@@ -19,9 +19,9 @@ export function getToken(request) {
 export async function getSessionUser(env, request) {
   const token = getToken(request);
   if (!token) return null;
-  const sess = await env.ASM_KV.get(`session:${token}`, { type: 'json' });
+  const sess = await env.ST_KV.get(`session:${token}`, { type: 'json' });
   if (!sess || Date.now() > sess.expiresAt) {
-    if (sess) await env.ASM_KV.delete(`session:${token}`);
+    if (sess) await env.ST_KV.delete(`session:${token}`);
     return null;
   }
   // Passcode session — read-only viewer
@@ -39,7 +39,7 @@ export async function getSessionUser(env, request) {
       expiresAt: sess.expiresAt,
     };
   }
-  const user = await env.ASM_KV.get(`user:${sess.email}`, { type: 'json' });
+  const user = await env.ST_KV.get(`user:${sess.email}`, { type: 'json' });
   if (!user) return null;
   // Attach orgId derived from session (never trust client-supplied orgId)
   user.orgId = sess.orgId || 'default';
@@ -60,7 +60,7 @@ const DEFAULT_MODULES = {
 };
 
 export async function getPermissionMatrix(env) {
-  const settings = await env.ASM_KV.get('settings:org', { type: 'json' });
+  const settings = await env.ST_KV.get('settings:org', { type: 'json' });
   const matrix = settings?.permissions?.modules || {};
   const merged = {};
   for (const [module, defaults] of Object.entries(DEFAULT_MODULES)) {
@@ -146,8 +146,8 @@ export async function trackMetric(env, type) {
   try {
     const today = new Date().toISOString().slice(0, 10);
     const key = `metric:${type}:${today}`;
-    const val = (await env.ASM_KV.get(key, { type: 'json' })) || { count: 0 };
+    const val = (await env.ST_KV.get(key, { type: 'json' })) || { count: 0 };
     val.count++;
-    await env.ASM_KV.put(key, JSON.stringify(val), { expirationTtl: 90 * 24 * 60 * 60 });
+    await env.ST_KV.put(key, JSON.stringify(val), { expirationTtl: 90 * 24 * 60 * 60 });
   } catch (e) {}
 }

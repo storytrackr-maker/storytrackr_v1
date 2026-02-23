@@ -26,10 +26,10 @@ async function requireAdmin(request, env) {
 }
 
 async function listUsers(env) {
-  const list  = await env.ASM_KV.list({ prefix: 'user:' });
+  const list  = await env.ST_KV.list({ prefix: 'user:' });
   const users = [];
   for (const key of list.keys) {
-    const u = await env.ASM_KV.get(key.name, { type: 'json' });
+    const u = await env.ST_KV.get(key.name, { type: 'json' });
     if (u) users.push({ name: u.name, email: u.email, role: u.role, status: u.status || null, createdAt: u.createdAt, leaderSince: u.leaderSince });
   }
   return jsonResp({ users });
@@ -40,12 +40,12 @@ async function updateUser(request, env, actingUser) {
   if (!email || !['approved', 'pending', 'admin', 'leader'].includes(role)) return jsonResp({ error: 'Invalid request' }, 400);
   if (email.toLowerCase() === actingUser.email.toLowerCase() && role !== 'admin') return jsonResp({ error: 'You cannot change your own admin status.' }, 403);
 
-  const target = await env.ASM_KV.get(`user:${email.toLowerCase()}`, { type: 'json' });
+  const target = await env.ST_KV.get(`user:${email.toLowerCase()}`, { type: 'json' });
   if (!target) return jsonResp({ error: 'User not found' }, 404);
   target.role = role;
   if (status) target.status = status;
   if (role !== 'pending' && target.status !== 'denied') target.status = 'approved';
-  await env.ASM_KV.put(`user:${email.toLowerCase()}`, JSON.stringify(target));
+  await env.ST_KV.put(`user:${email.toLowerCase()}`, JSON.stringify(target));
 
   if (notifyUser) {
     const approved = target.status === 'approved' || role !== 'pending';
@@ -58,7 +58,7 @@ async function updateUser(request, env, actingUser) {
     });
   }
 
-  await env.ASM_KV.put(`audit:user-status:${Date.now()}:${target.email}`, JSON.stringify({
+  await env.ST_KV.put(`audit:user-status:${Date.now()}:${target.email}`, JSON.stringify({
     actor: actingUser.email, email: target.email, role, status: target.status || null, notifyUser: !!notifyUser, createdAt: new Date().toISOString(),
   }), { expirationTtl: 180 * 24 * 60 * 60 });
 
@@ -66,15 +66,15 @@ async function updateUser(request, env, actingUser) {
 }
 
 async function getPermissions(env) {
-  const settings = await env.ASM_KV.get('settings:org', { type: 'json' }) || {};
+  const settings = await env.ST_KV.get('settings:org', { type: 'json' }) || {};
   return jsonResp({ permissions: settings.permissions || {} });
 }
 
 async function savePermissions(request, env) {
   const { permissions } = await request.json();
-  const settings = await env.ASM_KV.get('settings:org', { type: 'json' }) || {};
+  const settings = await env.ST_KV.get('settings:org', { type: 'json' }) || {};
   settings.permissions = permissions || settings.permissions || {};
-  await env.ASM_KV.put('settings:org', JSON.stringify(settings));
+  await env.ST_KV.put('settings:org', JSON.stringify(settings));
   return jsonResp({ success: true, permissions: settings.permissions });
 }
 
@@ -83,7 +83,7 @@ async function createQrInvite(request, env, actor) {
   const raw       = generateToken();
   const tokenHash = await hashToken(raw);
   const ttl       = Math.max(24, Math.min(72, Number(expiresHours) || 48)) * 3600;
-  await env.ASM_KV.put(`invite:${tokenHash}`, JSON.stringify({ type: 'qr', role, status: 'active', createdBy: actor.email, createdAt: Date.now() }), { expirationTtl: ttl });
+  await env.ST_KV.put(`invite:${tokenHash}`, JSON.stringify({ type: 'qr', role, status: 'active', createdBy: actor.email, createdAt: Date.now() }), { expirationTtl: ttl });
   return jsonResp({ success: true, inviteLink: `${APP_URL}/signup?inviteToken=${raw}`, expiresHours: ttl / 3600 });
 }
 
@@ -91,10 +91,10 @@ async function redeemInvite(request, env) {
   const { token, name, email, password } = await request.json();
   if (!token || !name || !password) return jsonResp({ error: 'Missing fields' }, 400);
   const tokenHash = await hashToken(token);
-  const invite    = await env.ASM_KV.get(`invite:${tokenHash}`, { type: 'json' });
+  const invite    = await env.ST_KV.get(`invite:${tokenHash}`, { type: 'json' });
   if (!invite || invite.status !== 'active') return jsonResp({ error: 'Invite invalid or expired' }, 400);
   invite.status = 'used'; invite.usedAt = Date.now();
-  await env.ASM_KV.put(`invite:${tokenHash}`, JSON.stringify(invite), { expirationTtl: 60 });
+  await env.ST_KV.put(`invite:${tokenHash}`, JSON.stringify(invite), { expirationTtl: 60 });
 
   const userEmail = email ? email.toLowerCase() : `invited-${Date.now()}@placeholder.local`;
   const user = {
@@ -102,7 +102,7 @@ async function redeemInvite(request, env) {
     mustChangePassword: false, passwordHash: await hashPassword(password),
     createdAt: new Date().toISOString(),
   };
-  await env.ASM_KV.put(`user:${userEmail}`, JSON.stringify(user));
+  await env.ST_KV.put(`user:${userEmail}`, JSON.stringify(user));
   return jsonResp({ success: true });
 }
 
@@ -111,13 +111,13 @@ async function inviteManual(request, env, actor) {
   if (!name || !email) return jsonResp({ error: 'Name and email required' }, 400);
   const raw       = generateToken();
   const tokenHash = await hashToken(raw);
-  await env.ASM_KV.put(`onboard:${tokenHash}`, JSON.stringify({ email: email.toLowerCase(), role, createdBy: actor.email, createdAt: Date.now() }), { expirationTtl: 72 * 3600 });
+  await env.ST_KV.put(`onboard:${tokenHash}`, JSON.stringify({ email: email.toLowerCase(), role, createdBy: actor.email, createdAt: Date.now() }), { expirationTtl: 72 * 3600 });
 
   const user = {
     email: email.toLowerCase(), name, role, status: 'approved', mustChangePassword: true,
     passwordHash: await hashPassword(generateToken().slice(0, 14)), createdAt: new Date().toISOString(),
   };
-  await env.ASM_KV.put(`user:${user.email}`, JSON.stringify(user));
+  await env.ST_KV.put(`user:${user.email}`, JSON.stringify(user));
 
   await sendEmail(env, {
     to: user.email,
