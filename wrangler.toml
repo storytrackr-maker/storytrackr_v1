@@ -1,21 +1,20 @@
-name = "asm-roster"
-main = "src/worker.js"
+name = "storytrackr-worker"
+main = "worker/src/worker.js"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
-binding = "ASM_KV"
-id = "fa0dcdbcbfac4c11a7c0ecc9944684f8"          # ← paste your KV namespace ID here
-preview_id = "fa0dcdbcbfac4c11a7c0ecc9944684f8"   # ← paste preview ID here (can be same)
+binding = "ST_KV"
+id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
+preview_id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
 
 [[r2_buckets]]
-binding = "ASM_R2"
-bucket_name = "asm-photos" 
+binding = "ST_R2"
+bucket_name = "storytrackr-media"
 
-# Secrets are set via: wrangler secret put SECRET_NAME
-# Required secrets:
-#   ADMIN_EMAIL
-#   GOOGLE_SCRIPT_URL
-#   MAILCHANNELS_FROM
-#   DRIVE_FOLDER_ID
-# Note: SITE_PASSWORD is now optional — passcode can be managed via Settings UI (stored in KV)
+workers_dev = false
+preview_urls = false
+
+[[routes]]
+pattern = "app.storytrackr.app/api/*"
+zone_name = "storytrackr.app"
