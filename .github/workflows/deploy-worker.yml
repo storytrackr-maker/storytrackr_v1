@@ -1,0 +1,14 @@
+name: Deploy Worker
+on:
+  push:
+    branches: [claude/saas-frontend-implementation-YUhum]
+    paths: [worker/**]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          workingDirectory: worker
