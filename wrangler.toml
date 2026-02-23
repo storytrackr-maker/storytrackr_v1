@@ -5,10 +5,6 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = false
 preview_urls = false
 
-[[routes]]
-pattern = "app.storytrackr.app/api/*"
-zone_name = "storytrackr.app"
-
 [[kv_namespaces]]
 binding = "ST_KV"
 id = "b1cda5b3dde9466db0c7edf37cc7d6af"
@@ -17,3 +13,8 @@ preview_id = "b1cda5b3dde9466db0c7edf37cc7d6af"
 [[r2_buckets]]
 binding = "ST_R2"
 bucket_name = "storytrackr-media"
+
+# NOTE: The app.storytrackr.app/api/* route is configured directly in the
+# Cloudflare Dashboard under storytrackr-worker → Triggers → Routes.
+# It is intentionally NOT declared here to prevent route conflicts when
+# this file is read by any build other than storytrackr-worker.
