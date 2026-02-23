@@ -2,19 +2,18 @@ name = "storytrackr-worker"
 main = "worker/src/worker.js"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
-
-[[kv_namespaces]]
-binding = "ST_KV"
-id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
-preview_id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
-
-[[r2_buckets]]
-binding = "ST_R2"
-bucket_name = "storytrackr-media"
-
 workers_dev = false
 preview_urls = false
 
 [[routes]]
 pattern = "app.storytrackr.app/api/*"
 zone_name = "storytrackr.app"
+
+[[kv_namespaces]]
+binding = "ST_KV"
+id = "b1cda5b3dde9466db0c7edf37cc7d6af"
+preview_id = "b1cda5b3dde9466db0c7edf37cc7d6af"
+
+[[r2_buckets]]
+binding = "ST_R2"
+bucket_name = "storytrackr-media"
