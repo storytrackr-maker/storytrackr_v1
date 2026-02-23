@@ -5,8 +5,8 @@ compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "ST_KV"
-id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
-preview_id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
+id = "b1cda5b3dde9466db0c7edf37cc7d6af"
+preview_id = "b1cda5b3dde9466db0c7edf37cc7d6af"
 
 [[r2_buckets]]
 binding = "ST_R2"
