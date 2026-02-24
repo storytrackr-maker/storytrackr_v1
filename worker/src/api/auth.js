@@ -26,7 +26,9 @@ async function signup(request, env) {
   const body = await parseJsonBody(request);
   if (!body) return jsonResp({ error: 'Invalid JSON body' }, 400);
   const { email, password, name, orgName } = body;
-  if (!email || !password || !name) return jsonResp({ error: 'All fields required' }, 400);
+  const normalizedOrgName = String(orgName || '').trim();
+  if (!email || !password || !name || !normalizedOrgName) return jsonResp({ error: 'Name, email, password, and ministry name are required' }, 400);
+  if (normalizedOrgName.length > 120) return jsonResp({ error: 'Ministry name is too long' }, 400);
   if (!validatePasswordStrength(password)) return jsonResp({ error: 'Use 10+ chars with upper/lowercase and number' }, 400);
   if (!isValidEmail(email)) return jsonResp({ error: 'Invalid email' }, 400);
   const normalizedEmail = normalizeEmail(email);
@@ -34,9 +36,9 @@ async function signup(request, env) {
 
   // Create org if orgName provided (new SaaS org creation)
   let newOrgId = 'default';
-  if (orgName) {
+  if (normalizedOrgName) {
     newOrgId = `org_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const org = { id: newOrgId, name: orgName, createdAt: new Date().toISOString(), ownerId: normalizedEmail };
+    const org = { id: newOrgId, name: normalizedOrgName, createdAt: new Date().toISOString(), ownerId: normalizedEmail };
     await env.ST_KV.put(`org:${newOrgId}`, JSON.stringify(org));
     // Make first user admin of their org
     await env.ST_KV.put(`orgmember:${newOrgId}:${normalizedEmail}`, JSON.stringify({ role: 'admin', status: 'approved', joinedAt: new Date().toISOString() }));
@@ -52,7 +54,7 @@ async function signup(request, env) {
   };
   await env.ST_KV.put(`user:${user.email}`, JSON.stringify(user));
 
-  if (!orgName) {
+  if (!normalizedOrgName) {
     await env.ST_KV.put(orgMemberKey('default', user.email), JSON.stringify({ role: 'pending', status: 'pending_approval', joinedAt: new Date().toISOString() }));
     // Notify admins for approval
     const admins = await listAdmins(env);
@@ -67,7 +69,7 @@ async function signup(request, env) {
   // Auto-login for new org creators
   const token = generateToken();
   await env.ST_KV.put(`session:${token}`, JSON.stringify({ email: user.email, orgId: newOrgId, expiresAt: Date.now() + SESSION_TTL * 1000 }), { expirationTtl: SESSION_TTL });
-  return new Response(JSON.stringify({ success: true, user: safeUser(user), onboarding: true }), {
+  return new Response(JSON.stringify({ success: true, user: await safeUser(user, env), onboarding: true }), {
     headers: { 'Content-Type': 'application/json', 'Set-Cookie': cookieStr('st_session', token, SESSION_TTL) },
   });
 }
@@ -103,7 +105,7 @@ async function login(request, env) {
   await trackMetric(env, 'login');
   return new Response(JSON.stringify({
     success: true,
-    user: safeUser(user),
+    user: await safeUser(user, env),
     orgIds: approvedMemberships.map(m => m.orgId),
     requireOrgPicker: approvedMemberships.length > 1,
   }), {
@@ -123,7 +125,7 @@ async function me(request, env) {
   const user = await getSessionUser(env, request);
   if (!user) return jsonResp({ user: null });
   await trackMetric(env, 'pageview');
-  return jsonResp({ user: safeUser(user), isDemoMode: !!user.isDemoMode });
+  return jsonResp({ user: await safeUser(user, env), isDemoMode: !!user.isDemoMode });
 }
 
 async function profileUpdate(request, env) {
@@ -205,13 +207,16 @@ async function listAdmins(env) {
   return admins;
 }
 
-function safeUser(user) {
+async function safeUser(user, env) {
+  const currentOrgId = user.orgId || 'default';
+  const org = await env.ST_KV.get(`org:${currentOrgId}`, { type: 'json' });
   return {
     name: user.name, email: user.email, role: user.orgRole || user.role,
     photoUrl: user.photoUrl || null, leaderSince: user.leaderSince || null,
     funFact: user.funFact || null, expiresAt: user.expiresAt || null,
     status: user.orgStatus || user.status || null, mustChangePassword: !!user.mustChangePassword,
-    isDemoMode: !!user.isDemoMode, orgId: user.orgId || 'default',
-    orgIds: user.orgIds || ['default'],
+    isDemoMode: !!user.isDemoMode, orgId: currentOrgId,
+    orgIds: user.orgIds || [currentOrgId],
+    orgName: org?.name || null,
   };
 }
