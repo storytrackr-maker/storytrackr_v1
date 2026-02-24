@@ -1,4 +1,4 @@
-import { jsonResp, getSessionUser, requirePermission } from './utils.js';
+import { jsonResp, withPermission, requirePermission } from './utils.js';
 
 export async function handleActivity(request, env, pathname, method) {
   if (pathname === '/api/activity/recent' && method === 'GET') return recentActivity(request, env);
@@ -7,7 +7,8 @@ export async function handleActivity(request, env, pathname, method) {
 }
 
 async function recentActivity(request, env) {
-  const list = await env.ST_KV.list({ prefix: 'activity:' });
+  return withPermission(env, request, 'activity', 'view', async () => {
+    const list = await env.ST_KV.list({ prefix: 'activity:' });
   const items = [];
   // Get the 50 most recent keys (KV lists alphabetically; timestamp keys sort correctly)
   const keys = list.keys.slice(-50).reverse();
@@ -15,8 +16,9 @@ async function recentActivity(request, env) {
     const item = await env.ST_KV.get(key.name, { type: 'json' });
     if (item) items.push(item);
   }
-  items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  return jsonResp({ items: items.slice(0, 30) });
+    items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return jsonResp({ items: items.slice(0, 30) });
+  });
 }
 
 async function activityStats(request, env) {

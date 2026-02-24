@@ -1,14 +1,40 @@
-name: Deploy Worker
+name: Test and Deploy Worker
+
 on:
+  pull_request:
+    paths:
+      - worker/**
+      - .github/workflows/deploy-worker.yml
   push:
-    branches: [claude/saas-frontend-implementation-YUhum]
-    paths: [worker/**]
+    branches: [main]
+    paths:
+      - worker/**
+      - .github/workflows/deploy-worker.yml
+
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Syntax checks
+        run: |
+          for f in $(find worker/src worker/test -name '*.js' -o -name '*.mjs'); do
+            node --check "$f"
+          done
+      - name: Unit tests
+        run: node --test worker/test/api-hardening.test.mjs
+
   deploy:
+    if: github.event_name == 'push'
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
           workingDirectory: worker

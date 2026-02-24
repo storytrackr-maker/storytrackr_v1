@@ -1,6 +1,4 @@
-import { jsonResp, requirePermission } from './utils.js';
-
-const SETTINGS_KEY = 'settings:org';
+import { jsonResp, requirePermission, orgSettingsKey } from './utils.js';
 
 const DEFAULT_SETTINGS = {
   ministryName: 'Anthem Students',
@@ -60,35 +58,37 @@ const DEFAULT_SETTINGS = {
 export async function handleSettings(request, env, pathname, method) {
   // Public settings — no auth needed (for branding on gate screen)
   if (pathname === '/api/settings/public' && method === 'GET') {
-    return getPublicSettings(env);
+    const orgId = new URL(request.url).searchParams.get('orgId') || 'default';
+    return getPublicSettings(env, orgId);
   }
 
   // All other settings routes require admin
   const perm = await requirePermission(env, request, 'adminland', 'admin');
-  if (!perm.ok) return jsonResp({ error: 'Admin access required' }, 403);
+  if (!perm.ok) return perm.response;
 
-  if (pathname === '/api/settings' && method === 'GET') return getSettings(env);
-  if (pathname === '/api/settings' && method === 'POST') return saveSettings(request, env);
+  const orgId = perm.user.orgId || 'default';
+  if (pathname === '/api/settings' && method === 'GET') return getSettings(env, orgId);
+  if (pathname === '/api/settings' && method === 'POST') return saveSettings(request, env, orgId);
 
   return jsonResp({ error: 'Not found' }, 404);
 }
 
-async function getSettings(env) {
-  const stored = await env.ST_KV.get(SETTINGS_KEY, { type: 'json' });
+async function getSettings(env, orgId = 'default') {
+  const stored = await env.ST_KV.get(orgSettingsKey(orgId), { type: 'json' });
   const settings = { ...DEFAULT_SETTINGS, ...stored };
   return jsonResp({ settings });
 }
 
-async function saveSettings(request, env) {
+async function saveSettings(request, env, orgId = 'default') {
   const updates = await request.json();
-  const current = await env.ST_KV.get(SETTINGS_KEY, { type: 'json' }) || {};
+  const current = await env.ST_KV.get(orgSettingsKey(orgId), { type: 'json' }) || {};
   const merged = deepMerge(DEFAULT_SETTINGS, current, updates);
-  await env.ST_KV.put(SETTINGS_KEY, JSON.stringify(merged));
+  await env.ST_KV.put(orgSettingsKey(orgId), JSON.stringify(merged));
   return jsonResp({ success: true, settings: merged });
 }
 
-async function getPublicSettings(env) {
-  const stored = await env.ST_KV.get(SETTINGS_KEY, { type: 'json' });
+async function getPublicSettings(env, orgId = 'default') {
+  const stored = await env.ST_KV.get(orgSettingsKey(orgId), { type: 'json' });
   const s = { ...DEFAULT_SETTINGS, ...stored };
   return jsonResp({
     ministryName: s.ministryName,

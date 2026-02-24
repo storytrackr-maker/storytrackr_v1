@@ -2,7 +2,10 @@
  * Photo upload API — R2 only (Google Drive removed)
  * Handles leader photos, logos, and student photos all via Cloudflare R2.
  */
-import { jsonResp, getSessionUser } from './utils.js';
+import { jsonResp, getSessionUser, checkRateLimit, getClientIp } from './utils.js';
+
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']);
 
 export async function handleUpload(request, env) {
   const user = await getSessionUser(env, request);
@@ -10,11 +13,20 @@ export async function handleUpload(request, env) {
   if (user.isDemoMode) return jsonResp({ error: 'Demo is read-only' }, 403);
   if (!env.ST_R2) return jsonResp({ error: 'Storage not configured' }, 500);
 
+  const ip = getClientIp(request);
+  const allowed = await checkRateLimit(env, `ratelimit:upload:${ip}`, 30, 60 * 15);
+  if (!allowed) return jsonResp({ error: 'Too many upload attempts. Please try again later.' }, 429);
+
   try {
     const formData = await request.formData();
     const file = formData.get('file');
     const type = formData.get('type') || 'student'; // 'student' | 'leader' | 'logo'
-    if (!file) return jsonResp({ error: 'No file provided' }, 400);
+    if (!file || typeof file.arrayBuffer !== 'function') return jsonResp({ error: 'No file provided' }, 400);
+    if (!['student', 'leader', 'logo'].includes(type)) return jsonResp({ error: 'Invalid upload type' }, 400);
+
+    const mime = (file.type || '').toLowerCase();
+    if (!ALLOWED_MIME_TYPES.has(mime)) return jsonResp({ error: 'Unsupported file type' }, 400);
+    if (file.size > MAX_UPLOAD_BYTES) return jsonResp({ error: 'File too large (max 5MB)' }, 400);
 
     return uploadToR2(file, type, env);
   } catch (e) {
