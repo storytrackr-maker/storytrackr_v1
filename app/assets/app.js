@@ -998,7 +998,8 @@ window.saveBrainDumpNote = async function(name, summary) {
 
 async function renderSettings() {
   mount(appShell(`<div class="loading-state"><div class="spinner"></div></div>`, 'settings'));
-  const data = await api('GET', 'settings/public');
+  const orgId = state.user?.orgId || 'default';
+  const data = await api('GET', `settings/public?orgId=${encodeURIComponent(orgId)}`);
   const s    = data;
 
   document.getElementById('main-content').innerHTML = `

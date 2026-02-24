@@ -7,15 +7,16 @@ export async function handleActivity(request, env, pathname, method) {
 }
 
 async function recentActivity(request, env) {
-  return withPermission(env, request, 'activity', 'view', async () => {
-    const list = await env.ST_KV.list({ prefix: 'activity:' });
-  const items = [];
-  // Get the 50 most recent keys (KV lists alphabetically; timestamp keys sort correctly)
-  const keys = list.keys.slice(-50).reverse();
-  for (const key of keys) {
-    const item = await env.ST_KV.get(key.name, { type: 'json' });
-    if (item) items.push(item);
-  }
+  return withPermission(env, request, 'activity', 'view', async (user) => {
+    const org = user.orgId || 'default';
+    const list = await env.ST_KV.list({ prefix: `activity:${org}:` });
+    const items = [];
+    // Get the 50 most recent keys (KV lists alphabetically; timestamp keys sort correctly)
+    const keys = list.keys.slice(-50).reverse();
+    for (const key of keys) {
+      const item = await env.ST_KV.get(key.name, { type: 'json' });
+      if (item) items.push(item);
+    }
     items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     return jsonResp({ items: items.slice(0, 30) });
   });
@@ -25,7 +26,8 @@ async function activityStats(request, env) {
   const perm = await requirePermission(env, request, 'activity', 'view');
   if (!perm.ok) return perm.response;
 
-  const list = await env.ST_KV.list({ prefix: 'activity:' });
+  const org = perm.user.orgId || 'default';
+  const list = await env.ST_KV.list({ prefix: `activity:${org}:` });
   const leaderCounts = {};
   const studentCounts = {};
   const now = new Date();
