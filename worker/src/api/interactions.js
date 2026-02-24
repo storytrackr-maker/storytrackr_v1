@@ -12,17 +12,18 @@ export async function handleInteractions(request, env, pathname, method) {
 }
 
 async function getInteractions(request, env) {
-  return withPermission(env, request, 'hangoutNotes', 'view', async () => {
+  return withPermission(env, request, 'hangoutNotes', 'view', async (user) => {
     const url = new URL(request.url);
-  const sk = url.searchParams.get('sk');
-  const section = url.searchParams.get('section');
-  const index = url.searchParams.get('index');
+    const sk = url.searchParams.get('sk');
+    const section = url.searchParams.get('section');
+    const index = url.searchParams.get('index');
 
-  if (!sk || !section || index === null) {
-    return jsonResp({ error: 'Missing sk, section, or index query parameter' }, 400);
-  }
+    if (!sk || !section || index === null) {
+      return jsonResp({ error: 'Missing sk, section, or index query parameter' }, 400);
+    }
 
-  const key = `interactions:${sk}:${section}:${index}`;
+    const org = user.orgId || 'default';
+    const key = `interactions:${org}:${sk}:${section}:${index}`;
     const data = await env.ST_KV.get(key, { type: 'json' });
     return jsonResp({ interactions: data || [] });
   });
@@ -35,14 +36,15 @@ async function postInteraction(request, env) {
   const body = await request.json();
   const { sk, section, index, interaction, studentName } = body;
 
-  // Store interaction list keyed by student
-  const kvKey   = `interactions:${sk}:${section}:${index}`;
+  const org = perm.user.orgId || 'default';
+  // Store interaction list keyed by student, scoped to org
+  const kvKey   = `interactions:${org}:${sk}:${section}:${index}`;
   const existing = (await env.ST_KV.get(kvKey, { type: 'json' })) || [];
   existing.push(interaction);
   await env.ST_KV.put(kvKey, JSON.stringify(existing));
 
-  // Global activity feed entry (90-day TTL)
-  const actKey = `activity:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
+  // Global activity feed entry (90-day TTL), scoped to org
+  const actKey = `activity:${org}:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
   await env.ST_KV.put(
     actKey,
     JSON.stringify({ ...interaction, studentName: studentName || '', sk, section, index }),
@@ -61,7 +63,8 @@ async function updateInteraction(request, env) {
   const user = perm.user;
 
   const { sk, section, index, interactionId, changes } = await request.json();
-  const kvKey   = `interactions:${sk}:${section}:${index}`;
+  const org = user.orgId || 'default';
+  const kvKey   = `interactions:${org}:${sk}:${section}:${index}`;
   const existing = (await env.ST_KV.get(kvKey, { type: 'json' })) || [];
   const noteIndex = existing.findIndex(n => n.id === interactionId);
   if (noteIndex === -1) return jsonResp({ error: 'Note not found' }, 404);
@@ -82,7 +85,8 @@ async function deleteInteraction(request, env) {
   const user = perm.user;
 
   const { sk, section, index, interactionId } = await request.json();
-  const kvKey   = `interactions:${sk}:${section}:${index}`;
+  const org = user.orgId || 'default';
+  const kvKey   = `interactions:${org}:${sk}:${section}:${index}`;
   const existing = (await env.ST_KV.get(kvKey, { type: 'json' })) || [];
   const note    = existing.find(n => n.id === interactionId);
   if (!note) return jsonResp({ error: 'Note not found' }, 404);
