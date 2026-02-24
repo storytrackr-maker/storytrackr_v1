@@ -281,9 +281,9 @@ function renderSignup() {
             <input class="form-input" type="password" name="password" placeholder="10+ chars, upper/lower/number" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Ministry / Organization name <span style="color:var(--muted)">(optional)</span></label>
-            <input class="form-input" type="text" name="orgName" placeholder="Westside Students">
-            <span class="form-hint">Leave blank if joining an existing org via invite link.</span>
+            <label class="form-label">Ministry / Organization name *</label>
+            <input class="form-input" type="text" name="orgName" placeholder="Westside Students" required>
+            <span class="form-hint">Required to create your organization.</span>
           </div>
           <div id="signup-error" class="form-error hidden"></div>
           <button class="btn btn-primary btn-full" type="submit" id="signup-btn">Create account</button>
@@ -499,7 +499,7 @@ function onboardStep1() {
     <form class="form-stack" onsubmit="onboard1Submit(event)">
       <div class="form-group">
         <label class="form-label">Ministry name *</label>
-        <input class="form-input" name="ministryName" value="${esc(onboardData.ministryName||state.user?.orgId||'')}" placeholder="Westside Students" required>
+        <input class="form-input" name="ministryName" value="${esc(onboardData.ministryName||state.user?.orgName||'')}" placeholder="Westside Students" required>
       </div>
       <div class="form-group">
         <label class="form-label">Campus / Location</label>
@@ -651,7 +651,7 @@ async function renderDashboard() {
     <div class="page">
       <div class="flex items-center justify-between mb-3">
         <h1>Dashboard</h1>
-        ${!state.isDemoMode ? `<button class="btn btn-primary btn-sm" onclick="openLogModal()">+ Log Hangout</button>` : ''}
+        <button class="btn btn-primary btn-sm" onclick="${state.isDemoMode ? 'demoBlock()' : 'openLogModal()'}">+ Log Hangout</button>
       </div>
 
       <div class="stats-grid mb-3">
@@ -904,7 +904,7 @@ async function renderNotes() {
     <div class="page">
       <div class="flex items-center justify-between mb-3">
         <h1>Notes &amp; Activity</h1>
-        ${!state.isDemoMode ? `<button class="btn btn-primary btn-sm" onclick="openLogModal()">+ Log Hangout</button>` : ''}
+        <button class="btn btn-primary btn-sm" onclick="${state.isDemoMode ? 'demoBlock()' : 'openLogModal()'}">+ Log Hangout</button>
       </div>
       <div class="card">
         <div class="card-body">
