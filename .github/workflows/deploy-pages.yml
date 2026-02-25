@@ -1,0 +1,54 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - app/**
+      - marketing/**
+      - .github/workflows/deploy-pages.yml
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+      marketing: ${{ steps.filter.outputs.marketing }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            app:
+              - 'app/**'
+            marketing:
+              - 'marketing/**'
+
+  deploy-app:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          # Deploys app/ → app.storytrackr.app
+          # Check your Cloudflare Pages dashboard for the exact project name
+          command: pages deploy app --project-name=storytrackr-app --branch=main
+
+  deploy-marketing:
+    needs: changes
+    if: needs.changes.outputs.marketing == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          # Deploys marketing/ → storytrackr.app
+          # Check your Cloudflare Pages dashboard for the exact project name
+          command: pages deploy marketing --project-name=storytrackr --branch=main
