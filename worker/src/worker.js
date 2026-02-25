@@ -11,6 +11,7 @@
 
 import { handleAuth }         from './api/auth.js';
 import { handleAdmin }        from './api/admin.js';
+import { handleOwner }        from './api/superadmin.js';
 import { handleInteractions } from './api/interactions.js';
 import { handleActivity }     from './api/activity.js';
 import { handleBrainDump }    from './api/brainDump.js';
@@ -98,6 +99,7 @@ export default {
       if (pathname.startsWith('/api/demo')) return withCors(handleDemo(req, env, pathname, method), cors);
       if (pathname.startsWith('/api/student/interactions')) return withCors(handleInteractions(req, env, pathname, method), cors);
       if (pathname.startsWith('/api/students')) return withCors(handleStudents(req, env, pathname, method), cors);
+      if (pathname.startsWith('/api/owner'))  return withCors(handleOwner(req, env, pathname, method), cors);
       if (pathname.startsWith('/api/admin/')) return withCors(handleAdmin(req, env, pathname, method), cors);
       if (pathname.startsWith('/api/activity/')) return withCors(handleActivity(req, env, pathname, method), cors);
       if (pathname === '/api/brain-dump' && method === 'POST') return withCors(handleBrainDump(req, env), cors);

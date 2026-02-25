@@ -53,6 +53,19 @@ const DEFAULT_SETTINGS = {
       dashboard: { pending: 'view', approved: 'view', leader: 'view', admin: 'admin' },
     },
   },
+  inactivityDays: 90,
+  statCards: {
+    totalStudents: true,
+    totalInteractions: true,
+    interactionsThisMonth: true,
+    activeLeaders: true,
+  },
+  features: {
+    goals: true,
+    notes: true,
+    activity: true,
+    familyContact: true,
+  },
 };
 
 export async function handleSettings(request, env, pathname, method) {
@@ -101,6 +114,9 @@ async function getPublicSettings(env, orgId = 'default') {
     appearance: s.appearance,
     permissions: s.permissions,
     accessMode: s.access?.mode || 'leaders-only',
+    inactivityDays: s.inactivityDays ?? 90,
+    statCards: s.statCards || DEFAULT_SETTINGS.statCards,
+    features: s.features || DEFAULT_SETTINGS.features,
   });
 }
 

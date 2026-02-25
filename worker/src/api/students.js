@@ -100,9 +100,9 @@ async function createStudent(request, env) {
     name, grade: grade || null, school: school || '',
     birthday: birthday || '', group: group || '', primaryGoal: primaryGoal || '',
     goals: [], photoUrl: photoUrl || null,
-    connectedThisQuarter: false, lastInteractionDate: null,
+    familyContacted: false, connectedThisQuarter: false, lastInteractionDate: null,
     lastInteractionSummary: '', lastLeader: '', interactionCount: 0,
-    createdAt: new Date().toISOString(),
+    archivedAt: null, createdAt: new Date().toISOString(),
   };
 
   list.push(student);

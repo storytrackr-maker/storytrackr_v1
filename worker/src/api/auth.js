@@ -26,10 +26,10 @@ async function signup(request, env) {
   const body = await parseJsonBody(request);
   if (!body) return jsonResp({ error: 'Invalid JSON body' }, 400);
   const { email, password, name, orgName } = body;
-  const normalizedOrgName = String(orgName || '').trim();
-  if (!email || !password || !name || !normalizedOrgName) return jsonResp({ error: 'Name, email, password, and ministry name are required' }, 400);
+  const normalizedOrgName = String(orgName || '').trim() || `${String(name || '').trim()}'s Ministry`;
+  if (!email || !password || !name) return jsonResp({ error: 'Name, email, and password are required' }, 400);
   if (normalizedOrgName.length > 120) return jsonResp({ error: 'Ministry name is too long' }, 400);
-  if (!validatePasswordStrength(password)) return jsonResp({ error: 'Use 10+ chars with upper/lowercase and number' }, 400);
+  if (!validatePasswordStrength(password)) return jsonResp({ error: "Your password isn't long enough." }, 400);
   if (!isValidEmail(email)) return jsonResp({ error: 'Invalid email' }, 400);
   const normalizedEmail = normalizeEmail(email);
   if (await env.ST_KV.get(`user:${normalizedEmail}`)) return jsonResp({ error: 'Account already exists' }, 409);
@@ -133,7 +133,7 @@ async function profileUpdate(request, env) {
   if (!user || !user.email) return jsonResp({ error: 'Not authenticated' }, 401);
   if (user.isDemoMode) return jsonResp({ error: 'Demo is read-only' }, 403);
   const updates = await request.json();
-  ['name', 'leaderSince', 'funFact', 'photoUrl'].forEach(k => { if (updates[k] !== undefined) user[k] = updates[k]; });
+  ['name', 'leaderSince', 'funFact', 'photoUrl', 'preferences'].forEach(k => { if (updates[k] !== undefined) user[k] = updates[k]; });
   await env.ST_KV.put(`user:${user.email}`, JSON.stringify(user));
   return jsonResp({ success: true });
 }
@@ -145,7 +145,7 @@ async function changePassword(request, env) {
   const { oldPassword, newPassword, confirmPassword } = await request.json();
   if (!oldPassword || !newPassword || !confirmPassword) return jsonResp({ error: 'All fields required' }, 400);
   if (newPassword !== confirmPassword) return jsonResp({ error: 'New passwords do not match' }, 400);
-  if (!validatePasswordStrength(newPassword)) return jsonResp({ error: 'Weak password' }, 400);
+  if (!validatePasswordStrength(newPassword)) return jsonResp({ error: "Your password isn't long enough." }, 400);
   if (!await verifyPassword(oldPassword, user.passwordHash)) return jsonResp({ error: 'Old password incorrect' }, 401);
   user.passwordHash = await hashPassword(newPassword);
   await env.ST_KV.put(`user:${user.email}`, JSON.stringify(user));
@@ -182,7 +182,7 @@ async function resetPassword(request, env) {
   const allowed = await checkRateLimit(env, `ratelimit:auth:reset:${ip}`, 12, 60 * 15);
   if (!allowed) return jsonResp({ error: 'Too many reset attempts. Please try again later.' }, 429);
   if (!token || !newPassword || newPassword !== confirmPassword) return jsonResp({ error: 'Invalid request' }, 400);
-  if (!validatePasswordStrength(newPassword)) return jsonResp({ error: 'Weak password' }, 400);
+  if (!validatePasswordStrength(newPassword)) return jsonResp({ error: "Your password isn't long enough." }, 400);
   const tokenHash = await hashToken(token);
   const rec = await env.ST_KV.get(`pwdreset:${tokenHash}`, { type: 'json' });
   if (!rec?.email) return jsonResp({ error: 'Invalid or expired token' }, 400);
@@ -218,5 +218,6 @@ async function safeUser(user, env) {
     isDemoMode: !!user.isDemoMode, orgId: currentOrgId,
     orgIds: user.orgIds || [currentOrgId],
     orgName: org?.name || null,
+    preferences: user.preferences || null,
   };
 }

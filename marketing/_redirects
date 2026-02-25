@@ -1,16 +1,16 @@
 # Canonical marketing page routes
-/features     /features.html   301
-/features/    /features.html   301
-/pricing      /pricing.html    301
-/pricing/     /pricing.html    301
-/security     /security.html   301
-/security/    /security.html   301
-/support      /support.html    301
-/support/     /support.html    301
-/privacy      /privacy.html    301
-/privacy/     /privacy.html    301
-/terms        /terms.html      301
-/terms/       /terms.html      301
+/features     /features.html   200
+/features/    /features.html   200
+/pricing      /pricing.html    200
+/pricing/     /pricing.html    200
+/security     /security.html   200
+/security/    /security.html   200
+/support      /support.html    200
+/support/     /support.html    200
+/privacy      /privacy.html    200
+/privacy/     /privacy.html    200
+/terms        /terms.html      200
+/terms/       /terms.html      200
 
 # Redirect old app links to app subdomain
 /login        https://app.storytrackr.app/login   302

@@ -54,13 +54,13 @@ export const PERMISSION_LEVELS = { none: 0, view: 1, edit: 2, admin: 3 };
 export const ROLE_DEFAULTS = { pending: 'view', approved: 'edit', leader: 'edit', admin: 'admin', viewer: 'view', demo: 'view' };
 
 const DEFAULT_MODULES = {
-  roster:       { pending: 'view',  approved: 'edit', leader: 'edit', admin: 'admin', demo: 'view' },
-  activity:     { pending: 'view',  approved: 'view', leader: 'edit', admin: 'admin', demo: 'view' },
-  brainDump:    { pending: 'none',  approved: 'edit', leader: 'edit', admin: 'admin', demo: 'none' },
-  attendance:   { pending: 'view',  approved: 'edit', leader: 'edit', admin: 'admin', demo: 'view' },
-  hangoutNotes: { pending: 'none',  approved: 'edit', leader: 'edit', admin: 'admin', demo: 'view' },
-  adminland:    { pending: 'none',  approved: 'none', leader: 'none', admin: 'admin', demo: 'none' },
-  dashboard:    { pending: 'view',  approved: 'view', leader: 'view', admin: 'admin', demo: 'view' },
+  roster:       { pending: 'view',  approved: 'edit', leader: 'edit', admin: 'admin', demo: 'view',  viewer: 'view' },
+  activity:     { pending: 'view',  approved: 'view', leader: 'edit', admin: 'admin', demo: 'view',  viewer: 'view' },
+  brainDump:    { pending: 'none',  approved: 'edit', leader: 'edit', admin: 'admin', demo: 'none',  viewer: 'none' },
+  attendance:   { pending: 'view',  approved: 'edit', leader: 'edit', admin: 'admin', demo: 'view',  viewer: 'view' },
+  hangoutNotes: { pending: 'none',  approved: 'edit', leader: 'edit', admin: 'admin', demo: 'view',  viewer: 'none' },
+  adminland:    { pending: 'none',  approved: 'none', leader: 'none', admin: 'admin', demo: 'none',  viewer: 'none' },
+  dashboard:    { pending: 'view',  approved: 'view', leader: 'view', admin: 'admin', demo: 'view',  viewer: 'view' },
 };
 
 export async function getPermissionMatrix(env, orgId = 'default') {
