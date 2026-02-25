@@ -11,12 +11,15 @@ export async function handleAdmin(request, env, pathname, method) {
   const adminCheck = await requireAdmin(request, env);
   if (!adminCheck.ok) return adminCheck.response;
 
-  if (pathname === '/api/admin/users'        && method === 'GET')  return listUsers(env, adminCheck.user);
-  if (pathname === '/api/admin/update'       && method === 'POST') return updateUser(request, env, adminCheck.user);
-  if (pathname === '/api/admin/permissions'  && method === 'GET')  return getPermissions(env, adminCheck.user);
-  if (pathname === '/api/admin/permissions'  && method === 'POST') return savePermissions(request, env, adminCheck.user);
-  if (pathname === '/api/admin/invite/manual'&& method === 'POST') return inviteManual(request, env, adminCheck.user);
-  if (pathname === '/api/admin/invite/qr'    && method === 'POST') return createQrInvite(request, env, adminCheck.user);
+  if (pathname === '/api/admin/users'            && method === 'GET')    return listUsers(env, adminCheck.user);
+  if (pathname === '/api/admin/update'           && method === 'POST')   return updateUser(request, env, adminCheck.user);
+  if (pathname === '/api/admin/permissions'      && method === 'GET')    return getPermissions(env, adminCheck.user);
+  if (pathname === '/api/admin/permissions'      && method === 'POST')   return savePermissions(request, env, adminCheck.user);
+  if (pathname === '/api/admin/invite/manual'    && method === 'POST')   return inviteManual(request, env, adminCheck.user);
+  if (pathname === '/api/admin/invite/qr'        && method === 'POST')   return createQrInvite(request, env, adminCheck.user);
+  if (pathname === '/api/admin/ministry'         && method === 'DELETE') return deleteMinistry(request, env, adminCheck.user);
+  if (pathname === '/api/admin/archive-graduates'&& method === 'POST')   return archiveGraduates(env, adminCheck.user);
+  if (pathname === '/api/admin/analytics'        && method === 'GET')    return getAnalytics(env, adminCheck.user);
   return jsonResp({ error: 'Not found' }, 404);
 }
 
@@ -132,8 +135,93 @@ async function redeemInvite(request, env) {
     createdAt: new Date().toISOString(),
   };
   await env.ST_KV.put(`user:${userEmail}`, JSON.stringify(user));
-  await env.ST_KV.put(orgMemberKey(invite.orgId || 'default', userEmail), JSON.stringify({ role: invite.role || 'leader', status: 'approved', joinedAt: new Date().toISOString() }));
-  return jsonResp({ success: true });
+  await env.ST_KV.put(orgMemberKey(invite.orgId || 'default', userEmail), JSON.stringify({ role: invite.role || 'leader', status: 'pending_approval', joinedAt: new Date().toISOString() }));
+  return jsonResp({ success: true, message: 'Account created. An admin will review and approve your access shortly.' });
+}
+
+async function deleteMinistry(request, env, actingUser) {
+  const body = await parseJsonBody(request);
+  if (!body) return jsonResp({ error: 'Invalid JSON body' }, 400);
+  const { confirmName } = body;
+  const orgId = actingUser.orgId || 'default';
+  const org = await env.ST_KV.get(`org:${orgId}`, { type: 'json' });
+  if (!org) return jsonResp({ error: 'Organization not found' }, 404);
+  if (!confirmName || confirmName !== org.name) return jsonResp({ error: 'Ministry name does not match' }, 400);
+
+  const prefixes = [
+    `org:${orgId}`,
+    `settings:org:${orgId}`,
+    `orgmember:${orgId}:`,
+    `roster:${orgId}:`,
+    `student:${orgId}:`,
+    `interactions:${orgId}:`,
+    `activity:${orgId}:`,
+    `invite:`,
+  ];
+  let deleted = 0;
+  for (const prefix of prefixes) {
+    const list = await env.ST_KV.list({ prefix });
+    for (const key of list.keys) {
+      await env.ST_KV.delete(key.name);
+      deleted++;
+    }
+  }
+  // Also delete the org key itself
+  await env.ST_KV.delete(`org:${orgId}`);
+  deleted++;
+  return jsonResp({ success: true, deleted });
+}
+
+async function archiveGraduates(env, actingUser) {
+  const orgId = actingUser.orgId || 'default';
+  let archived = 0;
+  for (const sk of ['hs', 'ms']) {
+    for (const section of ['core', 'loose', 'fringe']) {
+      const key = `roster:${orgId}:${sk}:${section}`;
+      const list = (await env.ST_KV.get(key, { type: 'json' })) || [];
+      let changed = false;
+      for (const student of list) {
+        if (Number(student.grade) === 12 && !student.archivedAt) {
+          student.archivedAt = new Date().toISOString();
+          await env.ST_KV.put(`student:${orgId}:${student.id}`, JSON.stringify(student));
+          archived++;
+          changed = true;
+        }
+      }
+      if (changed) await env.ST_KV.put(key, JSON.stringify(list));
+    }
+  }
+  return jsonResp({ success: true, archived });
+}
+
+async function getAnalytics(env, actingUser) {
+  const orgId = actingUser.orgId || 'default';
+  const prefix = `activity:${orgId}:`;
+  const list = await env.ST_KV.list({ prefix });
+
+  const leaderCounts = {};
+  const studentCounts = {};
+  const monthlyCounts = {};
+  let total = 0;
+
+  for (const key of list.keys) {
+    const entry = await env.ST_KV.get(key.name, { type: 'json' });
+    if (!entry) continue;
+    const items = Array.isArray(entry) ? entry : [entry];
+    for (const item of items) {
+      total++;
+      if (item.leader) leaderCounts[item.leader] = (leaderCounts[item.leader] || 0) + 1;
+      if (item.studentName) studentCounts[item.studentName] = (studentCounts[item.studentName] || 0) + 1;
+      const month = (item.date || item.createdAt || '').slice(0, 7);
+      if (month) monthlyCounts[month] = (monthlyCounts[month] || 0) + 1;
+    }
+  }
+
+  const topLeaders = Object.entries(leaderCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, count]) => ({ name, count }));
+  const topStudents = Object.entries(studentCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, count]) => ({ name, count }));
+  const monthly = Object.entries(monthlyCounts).sort((a, b) => a[0].localeCompare(b[0])).map(([month, count]) => ({ month, count }));
+
+  return jsonResp({ topLeaders, topStudents, monthly, total });
 }
 
 async function inviteManual(request, env, actor) {
@@ -157,7 +245,7 @@ async function inviteManual(request, env, actor) {
     passwordHash: await hashPassword(generateToken().slice(0, 14)), createdAt: new Date().toISOString(),
   };
   await env.ST_KV.put(`user:${user.email}`, JSON.stringify(user));
-  await env.ST_KV.put(orgMemberKey(actor.orgId || 'default', user.email), JSON.stringify({ role, status: 'approved', joinedAt: new Date().toISOString() }));
+  await env.ST_KV.put(orgMemberKey(actor.orgId || 'default', user.email), JSON.stringify({ role, status: 'pending_approval', joinedAt: new Date().toISOString() }));
 
   await sendEmail(env, {
     to: user.email,

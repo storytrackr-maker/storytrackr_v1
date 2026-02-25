@@ -345,3 +345,39 @@ tbody tr:hover { background: var(--surface-2); }
 @media (min-width: 768px) {
   .bottom-nav { display: none; }
 }
+
+/* ── Dark theme (explicit, same as root defaults) ── */
+[data-theme="dark"] {
+  --bg:        #0f172a;
+  --surface:   #1e293b;
+  --surface-2: #263347;
+  --border:    #334155;
+  --border-2:  #475569;
+  --text:      #f1f5f9;
+  --text-2:    #cbd5e1;
+  --muted:     #94a3b8;
+}
+
+/* ── Light theme ── */
+[data-theme="light"] {
+  --bg:        #f8fafc;
+  --surface:   #ffffff;
+  --surface-2: #f1f5f9;
+  --border:    #e2e8f0;
+  --border-2:  #cbd5e1;
+  --text:      #0f172a;
+  --text-2:    #334155;
+  --muted:     #64748b;
+  --shadow:    0 4px 24px rgba(0,0,0,.08);
+}
+[data-theme="light"] body { background: var(--bg); color: var(--text); }
+
+/* ── Compact mode ── */
+body.compact .page { padding: .5rem; }
+body.compact .card-body { padding: .75rem; }
+body.compact .card-header { padding: .5rem .75rem; }
+body.compact .student-card { padding: .5rem; }
+body.compact h1 { font-size: 1.3rem; }
+
+/* ── No sticky bottom nav ── */
+body.no-sticky-nav .bottom-nav { position: relative; }
