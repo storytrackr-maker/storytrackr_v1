@@ -16,9 +16,16 @@
   }
 
   // ── Active nav link ──────────────────────────────────────────
-  const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
+  const normalizePath = path => {
+    if (!path) return '/';
+    let out = path.replace(/\/$/, '') || '/';
+    if (out.endsWith('/index.html')) out = out.slice(0, -11) || '/';
+    if (out.endsWith('.html')) out = out.slice(0, -5) || '/';
+    return out;
+  };
+  const currentPath = normalizePath(window.location.pathname);
   document.querySelectorAll('.nav-links a').forEach(a => {
-    const href = a.getAttribute('href').replace(/\/$/, '') || '/';
+    const href = normalizePath(a.getAttribute('href'));
     if (href === currentPath) a.classList.add('active');
   });
 

@@ -70,7 +70,7 @@ async function render() {
   if (path === '/settings')           return renderSettings();
   if (path === '/billing')            return renderBilling();
   if (path === '/brain-dump')         return renderBrainDump();
-  if (path === '/adminland')          return renderAdminLand();
+  if (path === '/adminland' || path === '/admin-land' || path === '/admin') return renderAdminLand();
   if (path === '/owner')              return renderOwnerDashboard();
 
   navigate('/students', true);
@@ -1252,13 +1252,13 @@ function renderBilling() {
             </div>
             <span class="badge badge-green" style="margin-left:auto">Active</span>
           </div>
-          <a href="https://storytrackr.app/pricing.html" class="btn btn-primary btn-sm">Upgrade Plan</a>
+          <a href="https://storytrackr.app/pricing" class="btn btn-primary btn-sm">Upgrade Plan</a>
         </div>
       </div>
       <div class="card">
         <div class="card-header"><h3>Plan Comparison</h3></div>
         <div class="card-body">
-          <p class="text-sm text-muted mb-2">Compare plans on our <a href="https://storytrackr.app/pricing.html" target="_blank">pricing page</a> or contact us at <a href="mailto:billing@storytrackr.app">billing@storytrackr.app</a> for questions.</p>
+          <p class="text-sm text-muted mb-2">Compare plans on our <a href="https://storytrackr.app/pricing" target="_blank">pricing page</a> or contact us at <a href="mailto:billing@storytrackr.app">billing@storytrackr.app</a> for questions.</p>
         </div>
       </div>
     </div>
