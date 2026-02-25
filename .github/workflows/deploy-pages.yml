@@ -36,7 +36,6 @@ jobs:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           # Deploys app/ → app.storytrackr.app
-          # Check your Cloudflare Pages dashboard for the exact project name
           command: pages deploy app --project-name=storytrackr-app --branch=main
 
   deploy-marketing:
@@ -50,5 +49,4 @@ jobs:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           # Deploys marketing/ → storytrackr.app
-          # Check your Cloudflare Pages dashboard for the exact project name
-          command: pages deploy marketing --project-name=storytrackr --branch=main
+          command: pages deploy marketing --project-name=storytrackr-marketing --branch=main
