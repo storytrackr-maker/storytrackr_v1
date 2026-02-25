@@ -1,8 +1,9 @@
 name: Deploy Pages
 
 on:
+  workflow_dispatch:
   push:
-    branches: [main]
+    branches: ['**']
     paths:
       - app/**
       - marketing/**
@@ -27,7 +28,7 @@ jobs:
 
   deploy-app:
     needs: changes
-    if: needs.changes.outputs.app == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,11 +37,11 @@ jobs:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           # Deploys app/ → app.storytrackr.app
-          command: pages deploy app --project-name=storytrackr-app --branch=main
+          command: pages deploy app --project-name=storytrackr-app --branch=${{ github.ref_name }}
 
   deploy-marketing:
     needs: changes
-    if: needs.changes.outputs.marketing == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.marketing == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,4 +50,4 @@ jobs:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           # Deploys marketing/ → storytrackr.app
-          command: pages deploy marketing --project-name=storytrackr-marketing --branch=main
+          command: pages deploy marketing --project-name=storytrackr-marketing --branch=${{ github.ref_name }}

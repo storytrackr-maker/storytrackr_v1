@@ -7,7 +7,16 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://app.storytrackr.app; connect-src 'self' https://app.storytrackr.app; frame-ancestors 'none';
 
-/assets/*
+/assets/*.js
+  Cache-Control: public, max-age=300, must-revalidate
+
+/assets/*.css
+  Cache-Control: public, max-age=300, must-revalidate
+
+/assets/*.png
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*.ico
   Cache-Control: public, max-age=31536000, immutable
 
 /manifest.json

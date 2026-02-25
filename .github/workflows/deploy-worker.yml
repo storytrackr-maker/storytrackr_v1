@@ -1,6 +1,7 @@
 name: Test and Deploy Worker
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - worker/**
@@ -28,7 +29,7 @@ jobs:
         run: node --test worker/test/api-hardening.test.mjs
 
   deploy:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: test
     runs-on: ubuntu-latest
     steps:
